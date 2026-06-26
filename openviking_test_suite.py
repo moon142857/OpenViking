@@ -38,7 +38,56 @@ class TestResult:
 class OpenVikingTestSuite:
     def __init__(self):
         self.results: List[TestResult] = []
-        self.client = httpx.AsyncClient(timeout=30.0, headers=HEADERS)
+        # Increase default timeout; embedding-heavy endpoints may need more time.
+        self.client = httpx.AsyncClient(timeout=120.0, headers=HEADERS)
+        self.test_dir = "viking://resources/ov_test_4"
+        self.test_file = f"{self.test_dir}/Overview.md"
+
+    async def setup_test_resources(self):
+        """Import a test resource if it doesn't exist."""
+        # Check if test resource already exists
+        code, body, _ = await self._request(
+            "GET", "/api/v1/fs/stat", params={"uri": self.test_dir}
+        )
+        if code == 200:
+            return
+
+        # Import OpenViking README as test resource
+        code, body, _ = await self._request(
+            "POST", "/api/v1/resources",
+            json={
+                "path": "https://raw.githubusercontent.com/volcengine/OpenViking/main/README.md",
+                "to": self.test_dir,
+                "wait": False,
+            }
+        )
+        if code != 200 or body.get("status") != "ok":
+            print(f"Warning: resource import setup returned {code}: {body}")
+            return
+
+        # Wait for async processing (embedding / semantic indexing)
+        print("Waiting for resource indexing...")
+        for _ in range(60):
+            await asyncio.sleep(2)
+            code, body, _ = await self._request(
+                "GET", "/api/v1/observer/queue"
+            )
+            if code == 200:
+                status = body.get("result", {}).get("status", "")
+                if "Pending" in status and "In Progress" in status:
+                    pending = status.split("Pending")[1].split("|")[1].strip()
+                    in_progress = status.split("In Progress")[1].split("|")[1].strip()
+                    if pending == "0" and in_progress == "0":
+                        print("Indexing complete.")
+                        break
+        await asyncio.sleep(2)
+
+    async def cleanup_test_resources(self):
+        """Remove test directory and file."""
+        await self._request(
+            "DELETE", "/api/v1/fs",
+            params={"uri": self.test_dir, "recursive": "true"}
+        )
 
     async def close(self):
         await self.client.aclose()
@@ -220,7 +269,7 @@ class OpenVikingTestSuite:
         code, body, latency = await self._request(
             "POST", "/api/v1/search/find",
             json={
-                "query": "OpenViking 测试",
+                "query": "OpenViking",
                 "target_uri": "viking://resources/ov_test_4",
                 "limit": 5,
             }
@@ -296,7 +345,7 @@ class OpenVikingTestSuite:
     async def test_content_read(self):
         code, body, latency = await self._request(
             "GET", "/api/v1/content/read",
-            params={"uri": "viking://resources/ov_test_4/ov_test.md"}
+            params={"uri": self.test_file}
         )
         ok = code == 200 and body.get("status") == "ok"
         result = body.get("result", {}) if ok else {}
@@ -312,7 +361,7 @@ class OpenVikingTestSuite:
 
     async def test_content_write_and_read(self):
         # Use existing file, modify and restore
-        test_uri = "viking://resources/ov_test_4/ov_test.md"
+        test_uri = self.test_file
         # read original
         _, orig_body, _ = await self._request(
             "GET", "/api/v1/content/read", params={"uri": test_uri}
@@ -554,7 +603,7 @@ class OpenVikingTestSuite:
         code, body, latency = await self._request(
             "POST", "/api/v1/search/find",
             json={
-                "query": "OpenViking 上下文数据库",
+                "query": "OpenViking context database",
                 "target_uri": "viking://resources/ov_test_4",
                 "limit": 5,
             }
@@ -1090,12 +1139,14 @@ def generate_report(results: List[TestResult]) -> str:
 async def main():
     suite = OpenVikingTestSuite()
     try:
+        await suite.setup_test_resources()
         results = await suite.run_all()
         report = generate_report(results)
-        with open("/Users/zhengxiaoxi/repo/OpenViking/openviking_test_report.md", "w") as f:
+        report_path = "/Users/xx/repo/OpenViking/openviking_test_report_current.md"
+        with open(report_path, "w") as f:
             f.write(report)
         print("\n" + "=" * 60)
-        print("Test complete. Report saved to: openviking_test_report.md")
+        print(f"Test complete. Report saved to: {report_path}")
         print("=" * 60)
     finally:
         await suite.close()
