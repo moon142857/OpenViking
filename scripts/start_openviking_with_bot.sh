@@ -6,6 +6,10 @@ set -e
 cd "$(dirname "$0")/.."
 source .venv/bin/activate
 
+# Anthropic-compatible LLM endpoint (Kimi coding API)
+export ANTHROPIC_BASE_URL="https://api.kimi.com/coding/"
+export ANTHROPIC_API_KEY="sk-kimi-rveMDIby4n7nietnwzf2Kyaj6NPL0f0ynF8ZQ0uPtO81Z2FUKa3wfmgNAZfa0VEb"
+
 LOG_FILE="/tmp/openviking-server.log"
 PORT=1933
 

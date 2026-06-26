@@ -1,6 +1,6 @@
-# OpenViking 0.4.4 本地 MLX 部署与测试完整指南
+# OpenViking 0.4.5 本地 MLX 部署与测试完整指南
 
-> 本指南记录如何在 macOS Apple Silicon 上从零部署 OpenViking 0.4.4，配合本地 MLX 运行的 `Qwen3-Embedding-8B-4bit-DWQ` 和 `Qwen3-Reranker-8B-MLX-4bit`，并完成服务接口测试。  
+> 本指南记录如何在 macOS Apple Silicon 上从零部署 OpenViking 0.4.5，配合本地 MLX 运行的 `Qwen3-Embedding-0.6B-4bit-DWQ` 和 `Qwen3-Reranker-0.6B-4bit`，并完成服务接口测试。  
 > 目标：另一台机器按此文档可完整复刻。
 
 ---
@@ -27,11 +27,11 @@
 | 项目 | 最低配置 | 推荐配置 |
 |------|---------|---------|
 | 系统 | macOS 14+ | macOS 15+ |
-| 芯片 | Apple Silicon (M1+) | M3 Pro/Max 或更高 |
-| 内存 | 16 GB | 32 GB 或更高 |
+| 芯片 | Apple Silicon (M1+) | M2 Pro/Max 或更高 |
+| 内存 | 16 GB | 24 GB 或更高 |
 | 磁盘 | 20 GB 可用空间 | 50 GB+ SSD |
 
-> 8B 4-bit 量化模型在 Apple Silicon 上需要约 6–8 GB 显存/统一内存。如果内存只有 8 GB，建议改用 `Qwen3-Embedding-0.6B`。
+> 0.6B 4-bit 量化模型在 Apple Silicon 上大约占用 1–2 GB 统一内存。若内存只有 8 GB，建议关闭其他大型应用。
 
 ### 1.2 网络要求
 
@@ -71,7 +71,7 @@ npm --version
 uv --version
 ```
 
-参考版本（2026-06-22 验证通过）：
+参考版本（2026-06-26 验证通过）：
 
 ```
 Rust 1.94.0
@@ -113,13 +113,13 @@ source .venv/bin/activate
 OpenViking 当前 git tag 可能不连续，直接 `uv sync` 会触发 `setuptools_scm` 断言失败。需要显式指定版本：
 
 ```bash
-export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING=0.4.4
+export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING=0.4.5
 ```
 
 ### 3.4 安装依赖并编译
 
 ```bash
-export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING=0.4.4
+export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING=0.4.5
 uv sync --all-extras
 ```
 
@@ -148,21 +148,33 @@ ov --help
 ### 4.1 创建 MLX 环境
 
 ```bash
-python3.13 -m venv ~/mlx-env
+python3 -m venv ~/mlx-env
 source ~/mlx-env/bin/activate
 pip install --upgrade pip
 pip install mlx mlx-lm fastapi uvicorn transformers numpy
 ```
 
+> 若系统没有 `python3.13`，可直接用 `python3`（当前环境为 Python 3.14.6，MLX 同样可用）。
+
 ### 4.2 下载模型
 
-模型会从 HuggingFace 自动下载到 `~/.cache/huggingface/hub/`。
-
-可选：先配置 HF 镜像（国内）
+推荐先配置 HF 镜像（国内）：
 
 ```bash
 export HF_ENDPOINT=https://hf-mirror.com
 ```
+
+下载 0.6B MLX 量化模型：
+
+```bash
+source ~/mlx-env/bin/activate
+export HF_ENDPOINT=https://hf-mirror.com
+
+hf download mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ
+hf download mlx-community/Qwen3-Reranker-0.6B-4bit
+```
+
+模型会缓存到 `~/.cache/huggingface/hub/`。
 
 ### 4.3 创建 MLX Server 脚本
 
@@ -170,73 +182,75 @@ export HF_ENDPOINT=https://hf-mirror.com
 
 ```python
 #!/usr/bin/env python3
-"""MLX-based embedding + rerank server for OpenViking."""
+"""MLX-based Qwen3 embedding + rerank server for OpenViking."""
 
 import argparse
-import json
-import numpy as np
-from typing import List
+import logging
+from typing import List, Union
 
+import mlx.core as mx
+import numpy as np
+import uvicorn
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from mlx_lm import load
-from transformers import AutoTokenizer
-import uvicorn
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="Qwen3 MLX Embedding/Rerank Server")
 
-
-def cosine_similarity(a, b):
-    return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+DEFAULT_EMBEDDING_MODEL = "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ"
+DEFAULT_RERANK_MODEL = "mlx-community/Qwen3-Reranker-0.6B-4bit"
+DEFAULT_DIMENSION = 1024
 
 
 def load_models(embedding_model: str, rerank_model: str):
-    print(f"Loading embedding model: {embedding_model}")
+    logger.info(f"Loading embedding model: {embedding_model}")
     embed_m, embed_t = load(embedding_model)
-    print(f"Loading rerank model: {rerank_model}")
+    logger.info(f"Loading rerank model: {rerank_model}")
     rerank_m, rerank_t = load(rerank_model)
     return (embed_m, embed_t), (rerank_m, rerank_t)
 
 
-def embed_texts(texts: List[str], model, tokenizer):
+def embed_texts(texts: Union[str, List[str]], model, tokenizer):
     if isinstance(texts, str):
         texts = [texts]
-    inputs = tokenizer(
+    inputs = tokenizer._tokenizer(
         texts,
         padding=True,
         truncation=True,
         return_tensors="np",
         max_length=8192,
     )
-    # 简化：直接取 hidden state mean pooling
-    # 实际生产建议使用模型原生的 sentence_embedding 方式
-    import mlx.core as mx
-    input_ids = mx.array(inputs["input_ids"])
-    attention_mask = mx.array(inputs["attention_mask"])
-    outputs = model(input_ids)
-    hidden = outputs[0] if isinstance(outputs, tuple) else outputs.last_hidden_state
+    input_ids = mx.array(inputs["input_ids"].astype(np.int32))
+    attention_mask = mx.array(inputs["attention_mask"].astype(np.float32))
+    # Use the underlying transformer to get hidden states.
+    outputs = model.model(input_ids)
+    hidden = outputs[0] if isinstance(outputs, tuple) else outputs
     mask = attention_mask.astype(hidden.dtype)
     sum_embeddings = (hidden * mask[:, :, None]).sum(axis=1)
-    embeddings = sum_embeddings / mask.sum(axis=1)[:, None]
-    return np.array(embeddings)
+    embeddings = sum_embeddings / mx.maximum(mask.sum(axis=1), 1e-9)
+    return np.array(embeddings.astype(mx.float32))
 
 
 def rerank_scores(query: str, documents: List[str], model, tokenizer):
     pairs = [[query, doc] for doc in documents]
-    inputs = tokenizer(
+    inputs = tokenizer._tokenizer(
         pairs,
         padding=True,
         truncation=True,
         return_tensors="np",
         max_length=512,
     )
-    import mlx.core as mx
-    input_ids = mx.array(inputs["input_ids"])
-    attention_mask = mx.array(inputs["attention_mask"])
-    outputs = model(input_ids, attention_mask)
-    logits = outputs[0] if isinstance(outputs, tuple) else outputs.logits
-    scores = logits[:, -1, 0]  # 取最后一维第一个 logit 作为相关性分数
-    return np.array(scores).tolist()
+    input_ids = mx.array(inputs["input_ids"].astype(np.int32))
+    outputs = model(input_ids)
+    logits = outputs[0] if isinstance(outputs, tuple) else outputs
+    # Qwen3-Reranker: use the "yes" token logit at the last position.
+    yes_id = tokenizer._tokenizer.convert_tokens_to_ids("yes")
+    last_logits = logits[:, -1, :]
+    yes_scores = last_logits[:, yes_id]
+    return np.array(yes_scores.astype(mx.float32)).tolist()
 
 
 @app.get("/health")
@@ -248,7 +262,7 @@ def health():
 async def embeddings(req: Request):
     body = await req.json()
     texts = body.get("input", [])
-    model_id = body.get("model", "Qwen3-Embedding-8B-4bit-DWQ")
+    model_id = body.get("model", DEFAULT_EMBEDDING_MODEL)
     embeddings = embed_texts(texts, embed_model, embed_tokenizer)
     data = [
         {"object": "embedding", "index": i, "embedding": emb.tolist()}
@@ -267,7 +281,7 @@ async def rerank(req: Request):
     body = await req.json()
     query = body.get("query", "")
     documents = body.get("documents", [])
-    model_id = body.get("model", "Qwen3-Reranker-8B-MLX-4bit")
+    model_id = body.get("model", DEFAULT_RERANK_MODEL)
     scores = rerank_scores(query, documents, rerank_model, rerank_tokenizer)
     results = [
         {"index": i, "relevance_score": score, "document": doc}
@@ -286,8 +300,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=11436)
-    parser.add_argument("--embedding-model", default="mlx-community/Qwen3-Embedding-8B-4bit-DWQ")
-    parser.add_argument("--rerank-model", default="mlx-community/Qwen3-Reranker-8B-MLX-4bit")
+    parser.add_argument("--embedding-model", default=DEFAULT_EMBEDDING_MODEL)
+    parser.add_argument("--rerank-model", default=DEFAULT_RERANK_MODEL)
     args = parser.parse_args()
 
     (embed_model, embed_tokenizer), (rerank_model, rerank_tokenizer) = load_models(
@@ -308,7 +322,7 @@ python ~/repo/qwen3_embedding/qwen3_mlx_server.py \
   --port 11436
 ```
 
-首次启动会自动下载模型，耗时几分钟到十几分钟（取决于网络）。
+首次启动会自动检查/下载模型，耗时几分钟（取决于网络）。
 
 验证是否启动成功：
 
@@ -321,7 +335,7 @@ curl http://127.0.0.1:11436/health
 ```bash
 curl -X POST http://127.0.0.1:11436/v1/embeddings \
   -H "Content-Type: application/json" \
-  -d '{"input": "Hello world", "model": "Qwen3-Embedding-8B-4bit-DWQ"}'
+  -d '{"input": "Hello world", "model": "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ"}'
 ```
 
 测试 rerank：
@@ -332,7 +346,7 @@ curl -X POST http://127.0.0.1:11436/v1/rerank \
   -d '{
     "query": "OpenViking",
     "documents": ["OpenViking is a context database.", "Unrelated text."],
-    "model": "Qwen3-Reranker-8B-MLX-4bit"
+    "model": "mlx-community/Qwen3-Reranker-0.6B-4bit"
   }'
 ```
 
@@ -360,28 +374,41 @@ mkdir -p ~/.openviking
       "provider": "openai",
       "api_base": "http://localhost:11436/v1",
       "api_key": "dummy",
-      "model": "Qwen3-Embedding-8B-4bit-DWQ",
-      "dimension": 4096
-    }
+      "model": "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
+      "dimension": 1024,
+      "encoding_format": "float",
+      "batch_size": 32,
+      "input": "text"
+    },
+    "text_source": "content_only",
+    "max_input_tokens": 4096,
+    "allow_metadata_override": true
   },
   "vlm": {
     "provider": "kimi",
     "api_base": "https://api.kimi.com/coding",
     "api_key": "sk-kimi-YOUR_KEY_HERE",
-    "model": "kimi-2.6",
+    "model": "kimi-code",
     "temperature": 1.0
   },
   "rerank": {
     "provider": "openai",
     "api_base": "http://localhost:11436/v1/rerank",
     "api_key": "dummy",
-    "model": "Qwen3-Reranker-8B-MLX-4bit",
-    "threshold": 0.01
+    "model": "mlx-community/Qwen3-Reranker-0.6B-4bit",
+    "timeout": 120,
+    "threshold": 0.1
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 1933,
+    "auth_mode": "dev",
+    "cors_origins": ["*"]
   }
 }
 ```
 
-> 把 `YOUR_USERNAME` 和 `YOUR_KEY_HERE` 替换成实际值。`temperature` 固定为 1.0，避免部分 VLM 报错。
+> 把 `YOUR_USERNAME` 和 `YOUR_KEY_HERE` 替换成实际值。`temperature` 固定为 1.0，避免部分 VLM 报错。`auth_mode: dev` 用于本地开发，免去每次传 API Key；生产环境建议改为 `api_key` 并设置 `root_api_key`。
 
 ### 5.3 配置文件说明
 
@@ -389,8 +416,10 @@ mkdir -p ~/.openviking
 |------|------|
 | `storage.workspace` | OpenViking 数据目录，首次启动会自动初始化 |
 | `embedding.dense` | 指向本地 MLX embedding server |
+| `embedding.allow_metadata_override` | 切换 embedding 模型时允许复用已有向量库 |
 | `vlm` | 用于生成 L0/L1 摘要，当前使用 Kimi |
 | `rerank` | 指向本地 MLX rerank server，`threshold` 控制过滤阈值 |
+| `server.auth_mode` | `dev` 为本地免密模式，`api_key` 为正式模式 |
 
 ---
 
@@ -559,7 +588,7 @@ python scripts/api_functional_perf_test.py
 **解决**：
 
 ```bash
-export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING=0.4.4
+export SETUPTOOLS_SCM_PRETEND_VERSION_FOR_OPENVIKING=0.4.5
 uv sync --all-extras
 ```
 
@@ -571,7 +600,7 @@ uv sync --all-extras
 ```bash
 curl -X POST http://127.0.0.1:11436/v1/embeddings \
   -H "Content-Type: application/json" \
-  -d '{"input": "warmup"}'
+  -d '{"input": "warmup", "model": "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ"}'
 ```
 
 ### 8.3 `/search/find` 返回空结果
@@ -590,7 +619,7 @@ curl http://127.0.0.1:1933/api/v1/observer/queue
 **原因**：统一内存不足，系统开始使用 swap。  
 **解决**：
 - 关闭不必要的应用
-- 换用更小的模型（如 `Qwen3-Embedding-0.6B`）
+- 0.6B 模型已是最小推荐，若仍不足可关闭其他后台服务
 - 升级内存更大的机器
 
 ### 8.5 OpenViking Server 启动失败：端口被占用
@@ -615,6 +644,13 @@ kill -9 <PID>
 - 确认 key 有效
 - 在 `ov.conf` 中设置 `"temperature": 1.0`
 
+### 8.8 切换 embedding 模型后报错 `EmbeddingRebuildRequiredError`
+
+**原因**：已有向量库是用旧模型构建的，与新模型元数据不一致。  
+**解决**：
+- 在 `ov.conf` 的 `embedding` 段增加 `"allow_metadata_override": true`
+- 或删除 `storage.workspace` 目录重新初始化
+
 ---
 
 ## 9. 附录：一键脚本
@@ -629,12 +665,40 @@ kill -9 <PID>
 ```bash
 #!/bin/bash
 set -e
+
+PORT=11436
+LOG_FILE="/tmp/qwen3_mlx_server.log"
+
+# 检查端口是否已被占用
+if lsof -i :"$PORT" > /dev/null 2>&1; then
+    echo "Port $PORT is already in use. MLX server may already be running."
+    echo "Check: lsof -i :$PORT"
+    exit 1
+fi
+
 source ~/mlx-env/bin/activate
-nohup python ~/repo/qwen3_embedding/qwen3_mlx_server.py \
-  --host 127.0.0.1 --port 11436 \
-  > /tmp/qwen3_mlx_server.log 2>&1 &
-echo "MLX server started (PID: $!). Listening on http://127.0.0.1:11436"
-echo "Check log: tail -f /tmp/qwen3_mlx_server.log"
+
+# 国内用户建议开启 HF 镜像
+export HF_ENDPOINT="https://hf-mirror.com"
+
+echo "Starting Qwen3 MLX server on port $PORT..."
+echo "Log: $LOG_FILE"
+
+nohup python "${HOME}/repo/qwen3_embedding/qwen3_mlx_server.py" \
+    --host 127.0.0.1 --port "$PORT" \
+    > "$LOG_FILE" 2>&1 &
+
+# 等待服务就绪（模型加载可能耗时数秒）
+for i in {1..30}; do
+    if curl -s http://127.0.0.1:"$PORT"/health > /dev/null 2>&1; then
+        echo "MLX server started successfully."
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "Failed to start MLX server. Check log: $LOG_FILE"
+exit 1
 ```
 
 ### 9.2 启动 OpenViking Server（后台）
@@ -644,13 +708,41 @@ echo "Check log: tail -f /tmp/qwen3_mlx_server.log"
 ```bash
 #!/bin/bash
 set -e
+
 cd ~/repo/OpenViking
 source .venv/bin/activate
-nohup openviking-server --host 127.0.0.1 --port 1933 \
-  > /tmp/openviking_server.log 2>&1 &
-echo "OpenViking server started (PID: $!). Listening on http://127.0.0.1:1933"
-echo "Check log: tail -f /tmp/openviking_server.log"
+
+# Anthropic-compatible LLM endpoint (Kimi coding API)
+export ANTHROPIC_BASE_URL="https://api.kimi.com/coding/"
+export ANTHROPIC_API_KEY="sk-kimi-YOUR_KEY_HERE"
+
+LOG_FILE="/tmp/openviking-server.log"
+PORT=1933
+
+if lsof -i :"$PORT" > /dev/null 2>&1; then
+    echo "Port $PORT is already in use. OpenViking server may already be running."
+    echo "Check: lsof -i :$PORT"
+    exit 1
+fi
+
+echo "Starting OpenViking server on port $PORT..."
+echo "Log: $LOG_FILE"
+
+nohup openviking-server --host 127.0.0.1 --port "$PORT" \
+    > "$LOG_FILE" 2>&1 &
+
+sleep 3
+if lsof -i :"$PORT" > /dev/null 2>&1; then
+    echo "OpenViking server started successfully."
+    echo "API:    http://127.0.0.1:$PORT"
+    echo "Studio: http://127.0.0.1:$PORT/studio"
+else
+    echo "Failed to start OpenViking server. Check log: $LOG_FILE"
+    exit 1
+fi
 ```
+
+> 注意：把 `ANTHROPIC_API_KEY` 中的 `sk-kimi-YOUR_KEY_HERE` 替换为你的真实 key。当前 `ov.conf` 仍使用 `provider: kimi`，这两个环境变量供你后续切到 `provider: anthropic` 时使用。
 
 ### 9.3 启动 OpenViking Server with Bot（后台）
 
@@ -664,6 +756,10 @@ set -e
 
 cd "$(dirname "$0")/.."
 source .venv/bin/activate
+
+# Anthropic-compatible LLM endpoint (Kimi coding API)
+export ANTHROPIC_BASE_URL="https://api.kimi.com/coding/"
+export ANTHROPIC_API_KEY="sk-kimi-YOUR_KEY_HERE"
 
 LOG_FILE="/tmp/openviking-server.log"
 PORT=1933
@@ -768,6 +864,8 @@ python ~/repo/qwen3_embedding/qwen3_mlx_server.py \
 # 2. 启动 OpenViking with bot（另开终端）
 cd ~/repo/OpenViking
 source .venv/bin/activate
+export ANTHROPIC_BASE_URL="https://api.kimi.com/coding/"
+export ANTHROPIC_API_KEY="sk-kimi-YOUR_KEY_HERE"
 openviking-server --host 127.0.0.1 --port 1933 --with-bot
 ```
 
@@ -790,7 +888,7 @@ Bot API 路径前缀为 **`/bot/v1`**，不是 `/api/v1/bot`。
 
 ```bash
 curl http://127.0.0.1:1933/bot/v1/health
-# → {"status":"healthy","version":"0.4.4",...}
+# → {"status":"healthy","version":"0.4.5",...}
 
 curl -X POST http://127.0.0.1:1933/bot/v1/chat \
   -H "Content-Type: application/json" \
@@ -826,7 +924,7 @@ openviking-server --host 127.0.0.1 --port 1933 --with-bot
 按本文档操作即可完成：
 
 1. macOS Apple Silicon 环境准备
-2. OpenViking 0.4.4 源码编译
+2. OpenViking 0.4.5 源码编译
 3. 本地 MLX Qwen3 Embedding/Rerank 服务部署
 4. OpenViking 配置与启动（普通模式 / Bot 模式）
 5. 核心接口功能验证与性能测试
