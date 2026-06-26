@@ -1,0 +1,68 @@
+{
+  "embedding_model": "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
+  "reranker_model": "mlx-community/Qwen3-Reranker-0.6B-4bit",
+  "embedding": {
+    "single_latency_ms": {
+      "avg": 23.07,
+      "min": 22.79,
+      "max": 23.54
+    },
+    "batch": {
+      "batch_1": {
+        "avg_ms": 23.02,
+        "throughput_items_per_sec": 43.44
+      },
+      "batch_8": {
+        "avg_ms": 54.02,
+        "throughput_items_per_sec": 148.09
+      },
+      "batch_16": {
+        "avg_ms": 98.79,
+        "throughput_items_per_sec": 161.96
+      },
+      "batch_32": {
+        "avg_ms": 186.68,
+        "throughput_items_per_sec": 171.42
+      }
+    },
+    "seq_length": {
+      "length_128": {
+        "latency_ms": 70.55
+      },
+      "length_512": {
+        "latency_ms": 260.64
+      },
+      "length_1024": {
+        "latency_ms": 534.66
+      },
+      "length_2048": {
+        "latency_ms": 1146.07
+      }
+    }
+  },
+  "reranker": {
+    "single_latency_ms": {
+      "avg": 29.76,
+      "min": 29.1,
+      "max": 32.18
+    },
+    "batch": {
+      "batch_1": {
+        "avg_ms": 29.43,
+        "throughput_pairs_per_sec": 33.98
+      },
+      "batch_8": {
+        "avg_ms": 94.58,
+        "throughput_pairs_per_sec": 84.58
+      },
+      "batch_16": {
+        "avg_ms": 168.83,
+        "throughput_pairs_per_sec": 94.77
+      },
+      "batch_32": {
+        "avg_ms": 329.49,
+        "throughput_pairs_per_sec": 97.12
+      }
+    }
+  }
+}
