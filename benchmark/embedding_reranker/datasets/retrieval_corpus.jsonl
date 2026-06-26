@@ -1,0 +1,20 @@
+{"doc_id": "doc_001", "text": "OpenViking is an agent-native context database designed for long-context AI applications."}
+{"doc_id": "doc_002", "text": "MLX is a machine learning framework optimized for Apple Silicon, providing efficient GPU acceleration."}
+{"doc_id": "doc_003", "text": "Semantic search uses vector embeddings to find conceptually related content beyond keyword matching."}
+{"doc_id": "doc_004", "text": "Python is a popular programming language known for its readability and extensive libraries."}
+{"doc_id": "doc_005", "text": "A reranker model scores query-document pairs to improve the ordering of retrieval results."}
+{"doc_id": "doc_006", "text": "Apple Silicon chips like M1, M2, and M3 use unified memory architecture for CPU and GPU."}
+{"doc_id": "doc_007", "text": "Docker containers package applications with their dependencies for consistent deployment."}
+{"doc_id": "doc_008", "text": "Kubernetes orchestrates containerized applications across clusters of machines."}
+{"doc_id": "doc_009", "text": "Vector databases store high-dimensional embeddings and support approximate nearest neighbor search."}
+{"doc_id": "doc_010", "text": "Retrieval-Augmented Generation combines information retrieval with text generation models."}
+{"doc_id": "doc_011", "text": "OpenViking supports multiple embedding providers including OpenAI and local MLX models."}
+{"doc_id": "doc_012", "text": "The Qwen3 model series includes base models, instruction-tuned models, and embedding models."}
+{"doc_id": "doc_013", "text": "Quantization reduces model size and memory usage by representing weights with lower precision."}
+{"doc_id": "doc_014", "text": "FastAPI is a modern web framework for building APIs with Python based on standard type hints."}
+{"doc_id": "doc_015", "text": "uv is an extremely fast Python package installer and resolver written in Rust."}
+{"doc_id": "doc_016", "text": "OpenViking provides filesystem-like APIs for organizing and accessing context resources."}
+{"doc_id": "doc_017", "text": "Session management in OpenViking allows tracking multi-turn conversations with agents."}
+{"doc_id": "doc_018", "text": "Memory pressure on macOS can be monitored using the memory_pressure command."}
+{"doc_id": "doc_019", "text": "Hugging Face hosts pre-trained models and datasets for natural language processing."}
+{"doc_id": "doc_020", "text": "Setuptools_scm infers package versions from git tags and repository state."}

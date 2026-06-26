@@ -1,0 +1,24 @@
+{"query": "What is OpenViking?", "doc": "OpenViking is an agent-native context database designed for long-context AI applications.", "relevance": 3}
+{"query": "What is OpenViking?", "doc": "OpenViking supports multiple embedding providers including OpenAI and local MLX models.", "relevance": 3}
+{"query": "What is OpenViking?", "doc": "Python is a popular programming language known for its readability and extensive libraries.", "relevance": 0}
+{"query": "What is OpenViking?", "doc": "Docker containers package applications with their dependencies for consistent deployment.", "relevance": 0}
+{"query": "What is semantic search?", "doc": "Semantic search uses vector embeddings to find conceptually related content beyond keyword matching.", "relevance": 3}
+{"query": "What is semantic search?", "doc": "A reranker model scores query-document pairs to improve the ordering of retrieval results.", "relevance": 1}
+{"query": "What is semantic search?", "doc": "Setuptools_scm infers package versions from git tags and repository state.", "relevance": 0}
+{"query": "What does a reranker do?", "doc": "A reranker model scores query-document pairs to improve the ordering of retrieval results.", "relevance": 3}
+{"query": "What does a reranker do?", "doc": "Semantic search uses vector embeddings to find conceptually related content beyond keyword matching.", "relevance": 1}
+{"query": "What does a reranker do?", "doc": "FastAPI is a modern web framework for building APIs with Python based on standard type hints.", "relevance": 0}
+{"query": "MLX Apple Silicon", "doc": "MLX is a machine learning framework optimized for Apple Silicon, providing efficient GPU acceleration.", "relevance": 3}
+{"query": "MLX Apple Silicon", "doc": "Apple Silicon chips like M1, M2, and M3 use unified memory architecture for CPU and GPU.", "relevance": 2}
+{"query": "MLX Apple Silicon", "doc": "Python is a popular programming language known for its readability and extensive libraries.", "relevance": 0}
+{"query": "vector database", "doc": "Vector databases store high-dimensional embeddings and support approximate nearest neighbor search.", "relevance": 3}
+{"query": "vector database", "doc": "Kubernetes orchestrates containerized applications across clusters of machines.", "relevance": 0}
+{"query": "RAG", "doc": "Retrieval-Augmented Generation combines information retrieval with text generation models.", "relevance": 3}
+{"query": "RAG", "doc": "A reranker model scores query-document pairs to improve the ordering of retrieval results.", "relevance": 1}
+{"query": "什么是 OpenViking？", "doc": "OpenViking 是一个为长上下文 AI 应用设计的 Agent-native 上下文数据库。", "relevance": 3}
+{"query": "什么是 OpenViking？", "doc": "OpenViking 提供类似文件系统的 API 来组织和访问上下文资源。", "relevance": 3}
+{"query": "什么是 OpenViking？", "doc": "FastAPI 是一个现代 Python Web 框架，基于标准类型提示构建 API。", "relevance": 0}
+{"query": "语义搜索", "doc": "语义搜索使用向量嵌入来找到超越关键词匹配的概念相关的内容。", "relevance": 3}
+{"query": "语义搜索", "doc": "重排序模型对查询-文档对进行打分，以改进检索结果的排序。", "relevance": 1}
+{"query": "重排序模型", "doc": "重排序模型对查询-文档对进行打分，以改进检索结果的排序。", "relevance": 3}
+{"query": "重排序模型", "doc": "语义搜索使用向量嵌入来找到超越关键词匹配的概念相关的内容。", "relevance": 1}

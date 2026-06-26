@@ -1,0 +1,20 @@
+{"sentence1": "How can I learn Python programming?", "sentence2": "What is the best way to learn Python?", "label": 1}
+{"sentence1": "The company reported strong earnings this quarter.", "sentence2": "The firm announced weak quarterly profits.", "label": 0}
+{"sentence1": "Where is the nearest train station?", "sentence2": "Can you tell me how to get to the closest railway station?", "label": 1}
+{"sentence1": "I love eating pizza on weekends.", "sentence2": "My favorite weekend activity is hiking in the mountains.", "label": 0}
+{"sentence1": "The meeting has been rescheduled to 2 PM.", "sentence2": "The meeting time has been changed to 2 o'clock in the afternoon.", "label": 1}
+{"sentence1": "She is a professional software engineer.", "sentence2": "He works as a medical doctor.", "label": 0}
+{"sentence1": "What are the benefits of regular exercise?", "sentence2": "Why should I exercise regularly?", "label": 1}
+{"sentence1": "The book was written by a famous author.", "sentence2": "The movie was directed by a famous filmmaker.", "label": 0}
+{"sentence1": "How do I reset my password?", "sentence2": "What steps should I follow to change my password?", "label": 1}
+{"sentence1": "The restaurant serves Italian cuisine.", "sentence2": "The cafe specializes in French pastries.", "label": 0}
+{"sentence1": "什么是语义搜索？", "sentence2": "语义搜索是什么意思？", "label": 1}
+{"sentence1": "OpenViking 支持本地部署。", "sentence2": "OpenViking 只能在云端运行。", "label": 0}
+{"sentence1": "如何安装 MLX 框架？", "sentence2": "MLX 框架的安装步骤是什么？", "label": 1}
+{"sentence1": "苹果发布了新款 iPhone。", "sentence2": "三星推出了新款 Galaxy 手机。", "label": 0}
+{"sentence1": "嵌入模型用于将文本转换为向量。", "sentence2": "文本嵌入模型可以把句子变成向量表示。", "label": 1}
+{"sentence1": "Reranker 模型用于对搜索结果排序。", "sentence2": "Reranker 用于重新排序检索到的文档。", "label": 1}
+{"sentence1": "北京是中国的首都。", "sentence2": "上海是中国的首都。", "label": 0}
+{"sentence1": "大语言模型需要大量计算资源。", "sentence2": "大语言模型训练消耗很多算力。", "label": 1}
+{"sentence1": "向量数据库支持相似性检索。", "sentence2": "关系型数据库适合事务处理。", "label": 0}
+{"sentence1": "如何使用 OpenViking 进行语义搜索？", "sentence2": "OpenViking 语义搜索怎么用？", "label": 1}

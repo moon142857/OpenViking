@@ -1,0 +1,15 @@
+{"query_id": "q_001", "text": "What is OpenViking?", "relevant_docs": ["doc_001", "doc_011", "doc_016"]}
+{"query_id": "q_002", "text": "How does MLX work on Mac?", "relevant_docs": ["doc_002", "doc_006"]}
+{"query_id": "q_003", "text": "What is semantic search?", "relevant_docs": ["doc_003"]}
+{"query_id": "q_004", "text": "What does a reranker do?", "relevant_docs": ["doc_005"]}
+{"query_id": "q_005", "text": "vector database", "relevant_docs": ["doc_009"]}
+{"query_id": "q_006", "text": "RAG", "relevant_docs": ["doc_010"]}
+{"query_id": "q_007", "text": "Qwen3 models", "relevant_docs": ["doc_012"]}
+{"query_id": "q_008", "text": "model quantization", "relevant_docs": ["doc_013"]}
+{"query_id": "q_009", "text": "Python web framework", "relevant_docs": ["doc_014"]}
+{"query_id": "q_010", "text": "container orchestration", "relevant_docs": ["doc_008"]}
+{"query_id": "q_011", "text": "什么是 OpenViking？", "relevant_docs": ["doc_001", "doc_011", "doc_016"]}
+{"query_id": "q_012", "text": "语义搜索是什么", "relevant_docs": ["doc_003"]}
+{"query_id": "q_013", "text": "重排序模型", "relevant_docs": ["doc_005"]}
+{"query_id": "q_014", "text": "向量数据库", "relevant_docs": ["doc_009"]}
+{"query_id": "q_015", "text": "Apple Silicon 统一内存", "relevant_docs": ["doc_002", "doc_006"]}

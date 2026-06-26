@@ -1,0 +1,20 @@
+{"sentence1": "A man is playing a guitar on stage.", "sentence2": "A musician is performing with a guitar.", "score": 4.5}
+{"sentence1": "A group of people are dancing at a party.", "sentence2": "Several individuals are celebrating at a gathering.", "score": 4.2}
+{"sentence1": "The cat is sleeping on the couch.", "sentence2": "A dog is running in the park.", "score": 0.3}
+{"sentence1": "The weather is sunny today.", "sentence2": "It is a bright and clear day.", "score": 4.0}
+{"sentence1": "Someone is cooking dinner in the kitchen.", "sentence2": "A person is preparing a meal in the kitchen.", "score": 4.7}
+{"sentence1": "The car is parked in the garage.", "sentence2": "A bicycle is leaning against the wall.", "score": 0.5}
+{"sentence1": "Two children are playing with a ball.", "sentence2": "Kids are throwing a ball to each other.", "score": 4.3}
+{"sentence1": "A woman is reading a book.", "sentence2": "A man is watching television.", "score": 0.8}
+{"sentence1": "The train arrived at the station.", "sentence2": "The train pulled into the station.", "score": 4.8}
+{"sentence1": "A chef is chopping vegetables.", "sentence2": "A cook is slicing carrots.", "score": 4.4}
+{"sentence1": "OpenViking is an agent-native context database.", "sentence2": "OpenViking provides context storage for AI agents.", "score": 4.6}
+{"sentence1": "Semantic search finds relevant documents.", "sentence2": "Keyword search matches exact terms.", "score": 2.5}
+{"sentence1": "MLX runs efficiently on Apple Silicon.", "sentence2": "PyTorch MPS backend works on Mac GPUs.", "score": 3.5}
+{"sentence1": "The meeting starts at 3 PM.", "sentence2": "The conference begins at three in the afternoon.", "score": 4.6}
+{"sentence1": "A student is solving math problems.", "sentence2": "A teacher is grading exams.", "score": 1.2}
+{"sentence1": "人工智能正在改变我们的生活。", "sentence2": "AI 技术正在改变人们的生活方式。", "score": 4.4}
+{"sentence1": "今天天气很好，适合去公园散步。", "sentence2": "阳光明媚，适合户外活动。", "score": 3.8}
+{"sentence1": "OpenViking 是一个上下文数据库。", "sentence2": "OpenViking 提供智能体上下文存储。", "score": 4.5}
+{"sentence1": "机器学习是人工智能的一个分支。", "sentence2": "深度学习是机器学习的一种方法。", "score": 3.2}
+{"sentence1": "猫在沙发上睡觉。", "sentence2": "狗在院子里玩耍。", "score": 0.2}
