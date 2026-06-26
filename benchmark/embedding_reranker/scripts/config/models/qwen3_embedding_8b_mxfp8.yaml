@@ -1,0 +1,12 @@
+# mlx-community/Qwen3-Embedding-8B-mxfp8
+# Converted with mlx-embeddings. Use mlx-embeddings loader; mlx_lm produces incorrect embeddings.
+model_id: mlx-community/Qwen3-Embedding-8B-mxfp8
+display_name: Qwen3-Embedding-8B-mxfp8
+loader: mlx_embeddings
+instruction: "Given a web search query, retrieve relevant passages that answer the query"
+query_prefix: "Instruct: {instruction}\nQuery:{text}"
+document_prefix: "{text}"
+embedding:
+  pooling: last
+  normalize: true
+notes: "Highest-quality embedding in this family. Must use mlx-embeddings loader; mlx_lm STS drops to ~0.34."

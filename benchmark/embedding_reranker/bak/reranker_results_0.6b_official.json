@@ -1,0 +1,23 @@
+{
+  "model": "mlx-community/Qwen3-Reranker-0.6B-4bit",
+  "load_time_s": 1.56,
+  "max_length": 512,
+  "prompt_mode": "qwen3",
+  "instruction": "Given a web search query, retrieve relevant passages that answer the query",
+  "tasks": {
+    "pairwise_accuracy": {
+      "metric": "pairwise_accuracy",
+      "value": 1.0,
+      "samples": 11
+    },
+    "ndcg": {
+      "ndcg@10": 0.9864,
+      "samples": 9
+    },
+    "correlation": {
+      "metric": "spearman_correlation",
+      "value": 0.2502,
+      "samples": 24
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# mlx-community/Qwen3-Reranker-0.6B-mxfp8
+# Converted with mlx-embeddings. Official usage is bi-encoder: embed query & document
+# separately and use cosine/dot similarity as the relevance score.
+model_id: mlx-community/Qwen3-Reranker-0.6B-mxfp8
+display_name: Qwen3-Reranker-0.6B-mxfp8 (bi-encoder)
+loader: mlx_embeddings
+instruction: "Given a web search query, retrieve relevant passages that answer the query"
+query_prefix: "Instruct: {instruction}\nQuery:{text}"
+document_prefix: "{text}"
+reranker:
+  mode: embedding_similarity
+notes: |
+  Official mlx-embeddings usage treats this as a bi-encoder.
+  Query and document are embedded independently; relevance = cosine similarity.

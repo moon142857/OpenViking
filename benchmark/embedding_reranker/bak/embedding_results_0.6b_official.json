@@ -1,0 +1,35 @@
+{
+  "model": "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
+  "load_time_s": 1.63,
+  "max_length": 512,
+  "pooling": "last",
+  "normalize": true,
+  "instruction": "Given a web search query, retrieve relevant passages that answer the query",
+  "tasks": {
+    "sts": {
+      "metric": "spearman_correlation",
+      "value": 0.9191,
+      "samples": 20
+    },
+    "paraphrase": {
+      "metric": "paraphrase_detection",
+      "accuracy": 0.85,
+      "f1": 0.88,
+      "best_threshold": 0.7,
+      "samples": 20
+    },
+    "retrieval": {
+      "recall@1": 0.9333,
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "mrr": 0.9667,
+      "samples": 15
+    },
+    "clustering": {
+      "metric": "clustering_v_measure",
+      "value": 1.0,
+      "samples": 20,
+      "num_clusters": 3
+    }
+  }
+}

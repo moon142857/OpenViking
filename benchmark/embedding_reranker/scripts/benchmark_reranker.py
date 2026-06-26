@@ -1,16 +1,36 @@
 #!/usr/bin/env python3
-"""Reranker model functional benchmark.
+"""Reranker model functional benchmark (config-driven).
 
 Evaluates reranker models on:
 - Pair-wise ranking accuracy (relevant vs irrelevant)
 - NDCG-style ranking with graded relevance labels
 - Spearman correlation with human relevance labels
 
+Model configs live in config/models/*.yaml and specify:
+  - model_id / local path
+  - loader: mlx_lm | mlx_embeddings
+  - instruction
+  - reranker mode: cross_encoder | embedding_similarity
+
+Two official usage patterns are supported:
+
+1. cross_encoder (e.g. Qwen3-Reranker-0.6B-4bit)
+   Build the official Qwen3-Reranker prompt and score with
+   softmax([logit("no"), logit("yes")])[1] at the last token.
+
+2. embedding_similarity (e.g. Qwen3-Reranker-*-mxfp8 from mlx-embeddings)
+   Embed query and document independently and use cosine/dot similarity
+   as the relevance score, matching the official mlx-embeddings example.
+
 Usage:
-    python scripts/benchmark_reranker.py \
-        --model mlx-community/Qwen3-Reranker-0.6B-4bit \
-        --dataset ../datasets/rerank_pairs.jsonl \
-        --output ../results/reranker_results.json
+    # Cross-encoder reranker
+    python scripts/benchmark_reranker.py --config qwen3_reranker_0.6b_4bit
+
+    # Bi-encoder / embedding-similarity reranker
+    python scripts/benchmark_reranker.py --config qwen3_reranker_8b_mxfp8
+
+    # Raw model_id (defaults to cross_encoder)
+    python scripts/benchmark_reranker.py --model mlx-community/Qwen3-Reranker-0.6B-4bit
 """
 
 import argparse
@@ -18,12 +38,35 @@ import json
 import time
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 import mlx.core as mx
 import numpy as np
-from mlx_lm import load
+from config.loader import (
+    format_document,
+    format_query,
+    resolve_model_config,
+)
+from mlx_lm import load as mlx_lm_load
+from scipy.special import softmax
 from scipy.stats import spearmanr
+from sklearn.metrics.pairwise import cosine_similarity
+
+try:
+    from mlx_embeddings import generate as mlx_embeddings_generate
+    from mlx_embeddings import load as mlx_embeddings_load
+
+    HAS_MLX_EMBEDDINGS = True
+except ImportError:
+    HAS_MLX_EMBEDDINGS = False
+
+QWEN3_RANKER_PREFIX = (
+    "<|im_start|>system\n"
+    "Judge whether the Document meets the requirements based on the Query and the Instruct provided. "
+    'Note that the answer can only be "yes" or "no".<|im_end|>\n'
+    "<|im_start|>user\n"
+)
+QWEN3_RANKER_SUFFIX = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
 
 
 def load_jsonl(path: Path) -> List[Dict]:
@@ -31,28 +74,168 @@ def load_jsonl(path: Path) -> List[Dict]:
         return [json.loads(line) for line in f if line.strip()]
 
 
-def rerank_scores(queries: List[str], docs: List[str], model, tokenizer) -> np.ndarray:
-    pairs = [[q, d] for q, d in zip(queries, docs)]
-    inputs = tokenizer._tokenizer(
-        pairs,
+def build_qwen3_reranker_prompt(instruction: str, query: str, doc: str) -> str:
+    body = f"<Instruct>: {instruction}\n<Query>: {query}\n<Document>: {doc}"
+    return f"{QWEN3_RANKER_PREFIX}{body}{QWEN3_RANKER_SUFFIX}"
+
+
+def load_model(cfg: Dict) -> Tuple[object, object, float, bool]:
+    """Load a reranker model.
+
+    Returns:
+        (model, tokenizer, load_time_s, use_mlx_embeddings)
+    """
+    model_id = cfg["model_id"]
+    loader = cfg["loader"]
+    mode = cfg.get("reranker", {}).get("mode", "cross_encoder")
+    fallback = cfg.get("reranker", {}).get("fallback_on_missing_lm_head", False)
+
+    print(f"Loading reranker model: {model_id}")
+    print(f"  mode={mode}, loader={loader}")
+    t0 = time.time()
+
+    if loader == "mlx_embeddings":
+        if not HAS_MLX_EMBEDDINGS:
+            raise RuntimeError("mlx-embeddings is required. Install: pip install mlx-embeddings")
+        model, tokenizer = mlx_embeddings_load(model_id)
+        print(f"  Loaded with mlx-embeddings in {time.time() - t0:.2f}s")
+        return model, tokenizer, time.time() - t0, True
+
+    # loader == mlx_lm
+    try:
+        model, tokenizer = mlx_lm_load(model_id)
+        print(f"  Loaded with mlx_lm in {time.time() - t0:.2f}s")
+        return model, tokenizer, time.time() - t0, False
+    except ValueError as e:
+        if "lm_head.weight" not in str(e) or not fallback:
+            raise
+
+    print("  mlx_lm failed: missing lm_head.weight. Falling back to mlx-embeddings "
+          "(uses embed_tokens.as_linear as a tied lm_head approximation).")
+    if not HAS_MLX_EMBEDDINGS:
+        raise RuntimeError("mlx-embeddings is required for this fallback. Install: pip install mlx-embeddings")
+
+    model, tokenizer = mlx_embeddings_load(model_id)
+    print(f"  Loaded with mlx-embeddings in {time.time() - t0:.2f}s")
+    return model, tokenizer, time.time() - t0, True
+
+
+def tokenize_inputs(tokenizer, texts, max_length: int):
+    inner = tokenizer._tokenizer if hasattr(tokenizer, "_tokenizer") else tokenizer
+    return inner(
+        texts,
         padding=True,
         truncation=True,
         return_tensors="np",
-        max_length=512,
+        max_length=max_length,
     )
+
+
+def get_token_id(tokenizer, token: str) -> int:
+    inner = tokenizer._tokenizer if hasattr(tokenizer, "_tokenizer") else tokenizer
+    return inner.convert_tokens_to_ids(token)
+
+
+def embed_texts_mlx_embeddings(
+    texts: List[str],
+    model,
+    processor,
+    max_length: int,
+) -> np.ndarray:
+    """Embed a list of texts using the mlx-embeddings generate API."""
+    if not texts:
+        return np.zeros((0, 0))
+    output = mlx_embeddings_generate(
+        model,
+        processor,
+        texts=texts,
+        max_length=max_length,
+        padding=True,
+        truncation=True,
+    )
+    return np.array(output.text_embeds.astype(mx.float32))
+
+
+def rerank_scores_cross_encoder(
+    queries: List[str],
+    docs: List[str],
+    model,
+    tokenizer,
+    cfg: Dict,
+    use_mlx_embeddings: bool,
+) -> np.ndarray:
+    instruction = cfg["instruction"]
+    yes_token = cfg.get("reranker", {}).get("yes_token", "yes")
+    no_token = cfg.get("reranker", {}).get("no_token", "no")
+    max_length = cfg["max_length"]
+
+    texts = [build_qwen3_reranker_prompt(instruction, q, d) for q, d in zip(queries, docs)]
+    inputs = tokenize_inputs(tokenizer, texts, max_length)
     input_ids = mx.array(inputs["input_ids"].astype(np.int32))
-    outputs = model(input_ids)
-    logits = outputs[0] if isinstance(outputs, tuple) else outputs
-    yes_id = tokenizer._tokenizer.convert_tokens_to_ids("yes")
-    no_id = tokenizer._tokenizer.convert_tokens_to_ids("no")
+
+    if use_mlx_embeddings:
+        attention_mask = mx.array(inputs["attention_mask"].astype(np.int32))
+        last_hidden_state = model.model(input_ids, attention_mask=attention_mask)
+        logits = model.model.embed_tokens.as_linear(last_hidden_state)
+    else:
+        outputs = model(input_ids)
+        logits = outputs[0] if isinstance(outputs, tuple) else outputs
+
+    yes_id = get_token_id(tokenizer, yes_token)
+    no_id = get_token_id(tokenizer, no_token)
     last_logits = logits[:, -1, :]
-    # Use logit difference (yes - no) as relevance score.
-    scores = last_logits[:, yes_id] - last_logits[:, no_id]
-    return np.array(scores.astype(mx.float32))
+
+    score_matrix = np.stack(
+        [
+            np.array(last_logits[:, no_id].astype(mx.float32)),
+            np.array(last_logits[:, yes_id].astype(mx.float32)),
+        ],
+        axis=1,
+    )
+    scores = softmax(score_matrix, axis=1)[:, 1].astype(np.float32)
+    return scores
 
 
-def benchmark_pairwise_accuracy(data: List[Dict], model, tokenizer) -> Dict:
-    """For each query, check if relevant docs score higher than irrelevant docs."""
+def rerank_scores_embedding_similarity(
+    queries: List[str],
+    docs: List[str],
+    model,
+    tokenizer,
+    cfg: Dict,
+) -> np.ndarray:
+    """Bi-encoder reranker: embed query/doc separately, score by cosine similarity."""
+    instruction = cfg["instruction"]
+    query_prefix = cfg.get("query_prefix")
+    document_prefix = cfg.get("document_prefix")
+    max_length = cfg["max_length"]
+
+    query_texts = [format_query(q, instruction, query_prefix) for q in queries]
+    doc_texts = [format_document(d, document_prefix) for d in docs]
+
+    query_embs = embed_texts_mlx_embeddings(query_texts, model, tokenizer, max_length)
+    doc_embs = embed_texts_mlx_embeddings(doc_texts, model, tokenizer, max_length)
+
+    scores = cosine_similarity(query_embs, doc_embs).diagonal()
+    return scores.astype(np.float32)
+
+
+def rerank_scores(
+    queries: List[str],
+    docs: List[str],
+    model,
+    tokenizer,
+    cfg: Dict,
+    use_mlx_embeddings: bool,
+) -> np.ndarray:
+    mode = cfg.get("reranker", {}).get("mode", "cross_encoder")
+    if mode == "embedding_similarity":
+        return rerank_scores_embedding_similarity(queries, docs, model, tokenizer, cfg)
+    return rerank_scores_cross_encoder(queries, docs, model, tokenizer, cfg, use_mlx_embeddings)
+
+
+def benchmark_pairwise_accuracy(
+    data: List[Dict], model, tokenizer, cfg: Dict, use_mlx_embeddings: bool
+) -> Dict:
     by_query = defaultdict(list)
     for item in data:
         by_query[item["query"]].append(item)
@@ -67,7 +250,7 @@ def benchmark_pairwise_accuracy(data: List[Dict], model, tokenizer) -> Dict:
 
         q_list = [query] * (len(relevant) + len(irrelevant))
         d_list = [i["doc"] for i in relevant + irrelevant]
-        scores = rerank_scores(q_list, d_list, model, tokenizer)
+        scores = rerank_scores(q_list, d_list, model, tokenizer, cfg, use_mlx_embeddings)
 
         rel_scores = scores[: len(relevant)]
         irrel_scores = scores[len(relevant) :]
@@ -82,7 +265,9 @@ def benchmark_pairwise_accuracy(data: List[Dict], model, tokenizer) -> Dict:
     }
 
 
-def benchmark_ndcg(data: List[Dict], model, tokenizer, k: int = 10) -> Dict:
+def benchmark_ndcg(
+    data: List[Dict], model, tokenizer, cfg: Dict, use_mlx_embeddings: bool, k: int = 10
+) -> Dict:
     by_query = defaultdict(list)
     for item in data:
         by_query[item["query"]].append(item)
@@ -91,15 +276,12 @@ def benchmark_ndcg(data: List[Dict], model, tokenizer, k: int = 10) -> Dict:
     for query, items in by_query.items():
         q_list = [query] * len(items)
         d_list = [i["doc"] for i in items]
-        scores = rerank_scores(q_list, d_list, model, tokenizer)
+        scores = rerank_scores(q_list, d_list, model, tokenizer, cfg, use_mlx_embeddings)
 
-        # Sort by score descending
         order = np.argsort(scores)[::-1][:k]
         rels = np.array([items[i]["relevance"] for i in order])
 
-        # DCG
         dcg = float(np.sum(rels / np.log2(np.arange(2, len(rels) + 2))))
-        # Ideal DCG
         ideal_rels = np.sort([i["relevance"] for i in items])[::-1][:k]
         idcg = float(np.sum(ideal_rels / np.log2(np.arange(2, len(ideal_rels) + 2))))
 
@@ -112,11 +294,13 @@ def benchmark_ndcg(data: List[Dict], model, tokenizer, k: int = 10) -> Dict:
     }
 
 
-def benchmark_correlation(data: List[Dict], model, tokenizer) -> Dict:
+def benchmark_correlation(
+    data: List[Dict], model, tokenizer, cfg: Dict, use_mlx_embeddings: bool
+) -> Dict:
     queries = [item["query"] for item in data]
     docs = [item["doc"] for item in data]
     labels = np.array([item["relevance"] for item in data])
-    scores = rerank_scores(queries, docs, model, tokenizer)
+    scores = rerank_scores(queries, docs, model, tokenizer, cfg, use_mlx_embeddings)
 
     corr, _ = spearmanr(labels, scores)
     return {
@@ -126,12 +310,48 @@ def benchmark_correlation(data: List[Dict], model, tokenizer) -> Dict:
     }
 
 
+def build_config(args) -> Dict:
+    if args.config:
+        raw = resolve_model_config(args.config)
+    else:
+        raw = resolve_model_config(args.model)
+
+    cfg = {
+        "model_id": args.model if args.model else raw["model_id"],
+        "display_name": raw.get("display_name", raw["model_id"]),
+        "loader": raw.get("loader", "mlx_lm"),
+        "instruction": raw.get(
+            "instruction",
+            "Given a web search query, retrieve relevant passages that answer the query",
+        ),
+        "query_prefix": raw.get("query_prefix"),
+        "document_prefix": raw.get("document_prefix"),
+        "max_length": args.max_length,
+        "reranker": raw.get("reranker", {
+            "mode": "cross_encoder",
+            "prompt_template": "qwen3",
+            "yes_token": "yes",
+            "no_token": "no",
+            "fallback_on_missing_lm_head": False,
+        }),
+        "notes": raw.get("notes", ""),
+    }
+
+    if args.instruction is not None:
+        cfg["instruction"] = args.instruction
+
+    return cfg
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "--config",
+        help="Model config name (e.g. qwen3_reranker_0.6b_4bit) or path to a YAML file",
+    )
+    parser.add_argument(
         "--model",
-        default="mlx-community/Qwen3-Reranker-0.6B-4bit",
-        help="Reranker model ID or local path",
+        help="Override model_id or local path from the config",
     )
     parser.add_argument(
         "--dataset",
@@ -140,35 +360,53 @@ def main():
     )
     parser.add_argument("--output", default="../results/reranker_results.json")
     parser.add_argument("--max-length", type=int, default=512)
+    parser.add_argument("--instruction", help="Override task instruction")
     args = parser.parse_args()
 
-    print(f"Loading reranker model: {args.model}")
-    t0 = time.time()
-    model, tokenizer = load(args.model)
-    load_time = time.time() - t0
-    print(f"Model loaded in {load_time:.2f}s")
+    if not args.config and not args.model:
+        parser.error("One of --config or --model is required.")
+
+    cfg = build_config(args)
+    print(f"Loading reranker model: {cfg['model_id']}")
+    print(f"  config={args.config or 'auto'}, mode={cfg['reranker']['mode']}, "
+          f"loader={cfg['loader']}, instruction={cfg['instruction']!r}")
+    if cfg["notes"]:
+        print(f"  note: {cfg['notes']}")
+
+    model, tokenizer, load_time, use_mlx_embeddings = load_model(cfg)
+    print(f"  Active loader: {'mlx-embeddings' if use_mlx_embeddings else 'mlx_lm'}")
 
     data = load_jsonl(Path(args.dataset))
     out_path = Path(args.output)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
     results = {
-        "model": args.model,
+        "model": cfg["model_id"],
+        "display_name": cfg["display_name"],
         "load_time_s": round(load_time, 2),
-        "max_length": args.max_length,
+        "max_length": cfg["max_length"],
+        "instruction": cfg["instruction"],
+        "reranker_mode": cfg["reranker"]["mode"],
+        "use_mlx_embeddings": use_mlx_embeddings,
         "tasks": {},
     }
 
     print("\n[Pairwise Accuracy] Relevant vs irrelevant ranking...")
-    results["tasks"]["pairwise_accuracy"] = benchmark_pairwise_accuracy(data, model, tokenizer)
+    results["tasks"]["pairwise_accuracy"] = benchmark_pairwise_accuracy(
+        data, model, tokenizer, cfg, use_mlx_embeddings
+    )
     print(f"  Accuracy: {results['tasks']['pairwise_accuracy']['value']}")
 
     print("\n[NDCG] Graded relevance ranking...")
-    results["tasks"]["ndcg"] = benchmark_ndcg(data, model, tokenizer, k=10)
+    results["tasks"]["ndcg"] = benchmark_ndcg(
+        data, model, tokenizer, cfg, use_mlx_embeddings, k=10
+    )
     print(f"  NDCG@10: {results['tasks']['ndcg']['ndcg@10']}")
 
     print("\n[Correlation] Score-label correlation...")
-    results["tasks"]["correlation"] = benchmark_correlation(data, model, tokenizer)
+    results["tasks"]["correlation"] = benchmark_correlation(
+        data, model, tokenizer, cfg, use_mlx_embeddings
+    )
     print(f"  Spearman correlation: {results['tasks']['correlation']['value']}")
 
     with open(out_path, "w", encoding="utf-8") as f:

@@ -1,0 +1,12 @@
+# mlx-community/Qwen3-Embedding-4B-4bit-DWQ
+# Converted with mlx-lm, but should be loaded via mlx-embeddings for correct last-token pooling.
+model_id: mlx-community/Qwen3-Embedding-4B-4bit-DWQ
+display_name: Qwen3-Embedding-4B-4bit-DWQ
+loader: mlx_embeddings
+instruction: "Given a web search query, retrieve relevant passages that answer the query"
+query_prefix: "Instruct: {instruction}\nQuery:{text}"
+document_prefix: "{text}"
+embedding:
+  pooling: last
+  normalize: true
+notes: "Balanced embedding model. Use mlx-embeddings loader; mlx_lm yields near-random embeddings on MTEB tasks."

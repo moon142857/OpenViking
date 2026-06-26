@@ -1,0 +1,25 @@
+{
+  "model": "mlx-community/Qwen3-Reranker-0.6B-mxfp8",
+  "display_name": "Qwen3-Reranker-0.6B-mxfp8 (bi-encoder)",
+  "load_time_s": 1.29,
+  "max_length": 512,
+  "instruction": "Given a web search query, retrieve relevant passages that answer the query",
+  "reranker_mode": "embedding_similarity",
+  "use_mlx_embeddings": true,
+  "tasks": {
+    "pairwise_accuracy": {
+      "metric": "pairwise_accuracy",
+      "value": 0.3636,
+      "samples": 11
+    },
+    "ndcg": {
+      "ndcg@10": 0.7619,
+      "samples": 9
+    },
+    "correlation": {
+      "metric": "spearman_correlation",
+      "value": -0.123,
+      "samples": 24
+    }
+  }
+}

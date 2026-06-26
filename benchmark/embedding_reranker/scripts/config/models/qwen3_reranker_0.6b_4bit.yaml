@@ -1,0 +1,13 @@
+# mlx-community/Qwen3-Reranker-0.6B-4bit
+# Converted with mlx-lm. Official usage is cross-encoder: softmax over [no, yes] logits
+# at the last position of the official Qwen3-Reranker prompt.
+model_id: mlx-community/Qwen3-Reranker-0.6B-4bit
+display_name: Qwen3-Reranker-0.6B-4bit (cross-encoder)
+loader: mlx_lm
+instruction: "Given a web search query, retrieve relevant passages that answer the query"
+reranker:
+  mode: cross_encoder
+  prompt_template: qwen3
+  yes_token: "yes"
+  no_token: "no"
+notes: "Official cross-encoder reranker. Use mlx_lm loader with yes/no softmax scoring."

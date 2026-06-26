@@ -1,0 +1,36 @@
+{
+  "model": "mlx-community/Qwen3-Embedding-8B-mxfp8",
+  "load_time_s": 3.47,
+  "max_length": 512,
+  "use_mlx_embeddings": true,
+  "pooling": "last",
+  "normalize": true,
+  "instruction": "Given a web search query, retrieve relevant passages that answer the query",
+  "tasks": {
+    "sts": {
+      "metric": "spearman_correlation",
+      "value": 0.9281,
+      "samples": 20
+    },
+    "paraphrase": {
+      "metric": "paraphrase_detection",
+      "accuracy": 0.95,
+      "f1": 0.9565,
+      "best_threshold": 0.7,
+      "samples": 20
+    },
+    "retrieval": {
+      "recall@1": 1.0,
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "mrr": 1.0,
+      "samples": 15
+    },
+    "clustering": {
+      "metric": "clustering_v_measure",
+      "value": 1.0,
+      "samples": 20,
+      "num_clusters": 3
+    }
+  }
+}

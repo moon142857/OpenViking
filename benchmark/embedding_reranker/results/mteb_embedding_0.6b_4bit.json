@@ -1,0 +1,33 @@
+{
+  "model": "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
+  "display_name": "Qwen3-Embedding-0.6B-4bit-DWQ",
+  "tasks": [
+    "STSBenchmark"
+  ],
+  "elapsed_s": 58.4,
+  "results": {
+    "STSBenchmark": {
+      "main_score": 0.8451173739000306,
+      "scores": {
+        "test": [
+          {
+            "pearson": 0.8431411656936267,
+            "spearman": 0.845122423960809,
+            "cosine_pearson": 0.8431411405925813,
+            "cosine_spearman": 0.8451173739000306,
+            "manhattan_pearson": 0.843543050864641,
+            "manhattan_spearman": 0.8436391330112137,
+            "euclidean_pearson": 0.8456200592476149,
+            "euclidean_spearman": 0.8451174645618289,
+            "main_score": 0.8451173739000306,
+            "hf_subset": "default",
+            "languages": [
+              "eng-Latn"
+            ],
+            "mteb_version": "2.16.1"
+          }
+        ]
+      }
+    }
+  }
+}

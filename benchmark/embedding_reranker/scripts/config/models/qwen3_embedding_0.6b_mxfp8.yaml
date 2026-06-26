@@ -1,0 +1,12 @@
+# mlx-community/Qwen3-Embedding-0.6B-mxfp8
+# Converted with mlx-embeddings. Use mlx-embeddings loader for correct outputs.
+model_id: mlx-community/Qwen3-Embedding-0.6B-mxfp8
+display_name: Qwen3-Embedding-0.6B-mxfp8
+loader: mlx_embeddings
+instruction: "Given a web search query, retrieve relevant passages that answer the query"
+query_prefix: "Instruct: {instruction}\nQuery:{text}"
+document_prefix: "{text}"
+embedding:
+  pooling: last
+  normalize: true
+notes: "Low-memory, higher precision than 4bit. Must use mlx-embeddings loader."

@@ -1,0 +1,25 @@
+{
+  "model": "mlx-community/Qwen3-Reranker-0.6B-4bit",
+  "display_name": "Qwen3-Reranker-0.6B-4bit (cross-encoder)",
+  "load_time_s": 1.72,
+  "max_length": 512,
+  "instruction": "Given a web search query, retrieve relevant passages that answer the query",
+  "reranker_mode": "cross_encoder",
+  "use_mlx_embeddings": false,
+  "tasks": {
+    "pairwise_accuracy": {
+      "metric": "pairwise_accuracy",
+      "value": 1.0,
+      "samples": 11
+    },
+    "ndcg": {
+      "ndcg@10": 0.9864,
+      "samples": 9
+    },
+    "correlation": {
+      "metric": "spearman_correlation",
+      "value": 0.2502,
+      "samples": 24
+    }
+  }
+}

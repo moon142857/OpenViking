@@ -1,0 +1,22 @@
+# Default benchmarking suites.
+# Each suite names an embedding config and a reranker config from config/models/.
+suites:
+  low_memory_4bit:
+    name: "Low-memory 4-bit combination"
+    embedding: qwen3_embedding_0.6b_4bit_dwq
+    reranker: qwen3_reranker_0.6b_4bit
+
+  low_memory_mxfp8:
+    name: "Low-memory mxfp8 combination"
+    embedding: qwen3_embedding_0.6b_mxfp8
+    reranker: qwen3_reranker_0.6b_mxfp8
+
+  balanced:
+    name: "Balanced 4B embedding + 0.6B reranker"
+    embedding: qwen3_embedding_4b_4bit_dwq
+    reranker: qwen3_reranker_0.6b_4bit
+
+  high_quality:
+    name: "Highest-quality 8B mxfp8 combination"
+    embedding: qwen3_embedding_8b_mxfp8
+    reranker: qwen3_reranker_8b_mxfp8

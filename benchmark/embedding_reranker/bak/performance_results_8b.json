@@ -1,0 +1,68 @@
+{
+  "embedding_model": "/Users/zhengxiaoxi/.cache/huggingface/hub/Qwen3-Embedding-8B-4bit-DWQ",
+  "reranker_model": "/Users/zhengxiaoxi/.cache/huggingface/hub/Qwen3-Reranker-8B-MLX-4bit",
+  "embedding": {
+    "single_latency_ms": {
+      "avg": 460.95,
+      "min": 426.54,
+      "max": 526.27
+    },
+    "batch": {
+      "batch_1": {
+        "avg_ms": 454.07,
+        "throughput_items_per_sec": 2.2
+      },
+      "batch_8": {
+        "avg_ms": 1236.0,
+        "throughput_items_per_sec": 6.47
+      },
+      "batch_16": {
+        "avg_ms": 2473.93,
+        "throughput_items_per_sec": 6.47
+      },
+      "batch_32": {
+        "avg_ms": 5042.09,
+        "throughput_items_per_sec": 6.35
+      }
+    },
+    "seq_length": {
+      "length_128": {
+        "latency_ms": 1723.78
+      },
+      "length_512": {
+        "latency_ms": 7443.22
+      },
+      "length_1024": {
+        "latency_ms": 13726.29
+      },
+      "length_2048": {
+        "latency_ms": 28032.55
+      }
+    }
+  },
+  "reranker": {
+    "single_latency_ms": {
+      "avg": 497.7,
+      "min": 468.84,
+      "max": 566.02
+    },
+    "batch": {
+      "batch_1": {
+        "avg_ms": 481.94,
+        "throughput_pairs_per_sec": 2.07
+      },
+      "batch_8": {
+        "avg_ms": 1990.57,
+        "throughput_pairs_per_sec": 4.02
+      },
+      "batch_16": {
+        "avg_ms": 3842.8,
+        "throughput_pairs_per_sec": 4.16
+      },
+      "batch_32": {
+        "avg_ms": 7314.63,
+        "throughput_pairs_per_sec": 4.37
+      }
+    }
+  }
+}

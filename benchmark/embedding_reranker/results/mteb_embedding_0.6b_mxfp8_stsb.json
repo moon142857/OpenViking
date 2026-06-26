@@ -1,0 +1,33 @@
+{
+  "model": "mlx-community/Qwen3-Embedding-0.6B-mxfp8",
+  "display_name": "Qwen3-Embedding-0.6B-mxfp8",
+  "tasks": [
+    "STSBenchmark"
+  ],
+  "elapsed_s": 117.23,
+  "results": {
+    "STSBenchmark": {
+      "main_score": 0.8452901432749594,
+      "scores": {
+        "test": [
+          {
+            "pearson": 0.8407037978774778,
+            "spearman": 0.8452901432749594,
+            "cosine_pearson": 0.8407037310346714,
+            "cosine_spearman": 0.8452901432749594,
+            "manhattan_pearson": 0.8463906101277219,
+            "manhattan_spearman": 0.8442945571012925,
+            "euclidean_pearson": 0.8477876440931624,
+            "euclidean_spearman": 0.8452901432749594,
+            "main_score": 0.8452901432749594,
+            "hf_subset": "default",
+            "languages": [
+              "eng-Latn"
+            ],
+            "mteb_version": "2.16.1"
+          }
+        ]
+      }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "model": "/Users/zhengxiaoxi/.cache/huggingface/hub/Qwen3-Reranker-8B-MLX-4bit",
+  "load_time_s": 2.1,
+  "max_length": 512,
+  "prompt_mode": "qwen3",
+  "instruction": "Given a web search query, retrieve relevant passages that answer the query",
+  "tasks": {
+    "pairwise_accuracy": {
+      "metric": "pairwise_accuracy",
+      "value": 0.9091,
+      "samples": 11
+    },
+    "ndcg": {
+      "ndcg@10": 0.9871,
+      "samples": 9
+    },
+    "correlation": {
+      "metric": "spearman_correlation",
+      "value": 0.4274,
+      "samples": 24
+    }
+  }
+}
