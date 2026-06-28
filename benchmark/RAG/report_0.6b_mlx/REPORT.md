@@ -19,6 +19,20 @@
 | Average F1 | 0.332 | 答案词重叠（对 SyllabusQA 这类长答案天然偏低） |
 | Avg 检索延迟 | 14.4 s/query | 本机串行（含 0.6B embed + rerank + 层级检索）|
 
+### 0.1 对照实验：reranker 的端到端增益（关 vs 开）
+
+同一份 SyllabusQA（20 题、topk=5、其余配置完全相同），仅切换 rerank：
+
+| 指标 | rerank **关**（仅 embedding 召回） | rerank **开**（+0.6B cross-encoder） | 增益 |
+|------|:---:|:---:|:---:|
+| **Average Recall** | 0.489 | **0.613** | **+25.4%** |
+| **Accuracy（归一化）** | 0.625 | **0.738** | **+18.1%** |
+| Accuracy（0–4） | 2.50 | 2.95 | +0.45 |
+| F1 | 0.305 | 0.332 | +9% |
+
+**结论：修复后的 0.6B cross-encoder reranker 在真实 RAG 里带来确凿增益**——Recall +25%、答案正确率 +18%。这与单元/MTEB 层面的结论一致（SciFact e2e nDCG +6.6%），证明这套小模型组合"召回 + 精排"的两段式是有效的。原始数据见 `metrics_norerank.json`（关）与 `metrics.json`（开）。
+
+
 - **Recall 0.61 / Accuracy 0.74**：0.6B 这套小模型在真实教育 RAG 里是**可用**的——大部分问题能召回正确证据并答对。
 - F1 偏低是 SyllabusQA 答案较长、措辞自由导致的**指标特性**，不代表答错（Accuracy 由 LLM 语义评判更可信）。
 - 生成/评判用的是 Kimi（kimi-2.6），**F1/Accuracy 同时反映 Kimi 的生成质量**；Recall 才是这两个被测模型的纯净信号。
