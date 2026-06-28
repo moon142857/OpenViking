@@ -1,0 +1,9 @@
+{
+  "model": "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
+  "display_name": "Qwen3-Embedding-0.6B-4bit-DWQ",
+  "tasks": [
+    "SciFact"
+  ],
+  "elapsed_s": 0.4,
+  "results": {}
+}

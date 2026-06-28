@@ -237,16 +237,16 @@ def benchmark_retrieval(corpus_path: Path, queries_path: Path, model, tokenizer,
     queries = load_jsonl(queries_path)
 
     doc_ids = list(corpus.keys())
-    doc_texts = [format_document(corpus[did], cfg["document_prefix"]) for did in doc_ids]
+    doc_texts = [corpus[did] for did in doc_ids]
     doc_embeddings = embed_texts(
-        doc_texts, model, tokenizer, cfg["max_length"], cfg["loader"], cfg["query_prefix"], cfg["instruction"]
+        doc_texts, model, tokenizer, cfg["max_length"], cfg["loader"], cfg["document_prefix"], cfg["instruction"]
     )
 
     results = {"recall@1": 0.0, "recall@5": 0.0, "recall@10": 0.0, "mrr": 0.0}
     total = 0
 
     for q in queries:
-        q_text = format_query(q["text"], cfg["instruction"], cfg["query_prefix"])
+        q_text = q["text"]
         q_emb = embed_texts(
             [q_text], model, tokenizer, cfg["max_length"], cfg["loader"], cfg["query_prefix"], cfg["instruction"]
         )
@@ -269,7 +269,7 @@ def benchmark_retrieval(corpus_path: Path, queries_path: Path, model, tokenizer,
 
 def benchmark_clustering(dataset_path: Path, model, tokenizer, cfg: Dict) -> Dict:
     data = load_jsonl(dataset_path)
-    texts = [format_query(d["text"], cfg["instruction"], cfg["query_prefix"]) for d in data]
+    texts = [d["text"] for d in data]
     labels = np.array([d["cluster"] for d in data])
 
     embeddings = embed_texts(texts, model, tokenizer, cfg["max_length"], cfg["loader"], cfg["query_prefix"], cfg["instruction"])

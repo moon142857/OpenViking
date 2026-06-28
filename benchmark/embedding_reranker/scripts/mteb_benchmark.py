@@ -25,6 +25,7 @@ from config.loader import (
 )
 from mteb import get_task
 from mteb.models.model_meta import ModelMeta
+from mteb.types import PromptType as MTEBPromptType
 from sklearn.metrics.pairwise import cosine_similarity
 
 try:
@@ -183,12 +184,20 @@ class MLXEncoderForMTEB:
 
         instruction = self.cfg.get("instruction", "")
         query_prefix = self.cfg.get("query_prefix")
-        # For MTEB embedding tasks, apply instruction only when explicitly requested.
-        # STS tasks typically perform best without a retrieval-style instruction.
-        if kwargs.get("apply_instruction", False):
-            input_texts = [format_query(t, instruction, query_prefix) for t in texts]
+        document_prefix = self.cfg.get("document_prefix")
+
+        # Determine which prefix to apply based on prompt_type.
+        # STS tasks typically perform best without a retrieval-style instruction,
+        # so we only apply the query instruction when prompt_type indicates a query.
+        if prompt_type is not None:
+            if isinstance(prompt_type, str):
+                prompt_type = MTEBPromptType(prompt_type)
+            is_query = prompt_type == MTEBPromptType.query
         else:
-            input_texts = texts
+            is_query = kwargs.get("apply_instruction", False)
+
+        prefix = query_prefix if is_query else document_prefix
+        input_texts = [format_query(t, instruction, prefix) if prefix else t for t in texts]
         embs = self.backend.encode_sentences(input_texts, batch_size=batch_size)
         return _normalize_embeddings(embs)
 

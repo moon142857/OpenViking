@@ -3,12 +3,23 @@
 
 import argparse
 import json
+import math
 from pathlib import Path
 
 
 def load_json(path: Path) -> dict:
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def _fmt_score(value) -> str:
+    """Format a score value, converting NaN/None to '-'."""
+    if value is None or (isinstance(value, float) and math.isnan(value)):
+        return "-"
+    try:
+        return f"{float(value):.4f}"
+    except (TypeError, ValueError):
+        return str(value)
 
 
 def extract_scores(data: dict) -> dict:
@@ -63,7 +74,7 @@ def main():
         cells = [model]
         for task in all_tasks:
             score = info["scores"].get(task)
-            cells.append(f"{score:.4f}" if score is not None else "-")
+            cells.append(_fmt_score(score))
         cells.append(f"{info['elapsed_s']:.1f}")
         lines.append("| " + " | ".join(cells) + " |")
 
