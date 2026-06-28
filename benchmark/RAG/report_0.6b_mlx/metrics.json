@@ -1,0 +1,26 @@
+{
+    "Insertion Efficiency (Total Dataset)": {
+        "Total Insertion Time (s)": 298.7121238708496,
+        "Total Input Tokens": 44986,
+        "Total Output Tokens": 102381,
+        "Total Embedding Tokens": 42650
+    },
+    "Query Efficiency (Average Per Query)": {
+        "Average Retrieval Time (s)": 14.415245401859284,
+        "Average Input Tokens": 2865.45,
+        "Average Output Tokens": 83.0
+    },
+    "Dataset": "SyllabusQA",
+    "Total Queries Evaluated": 20,
+    "Performance Metrics": {
+        "Average F1 Score": 0.33179739132797964,
+        "Average Recall": 0.6133333333333334,
+        "Average Accuracy (Hit 0-4)": 2.95,
+        "Average Accuracy (normalization)": 0.7375
+    },
+    "Deletion Efficiency (Total Dataset)": {
+        "Total Deletion Time (s)": 0.13440990447998047,
+        "Total Input Tokens": 0,
+        "Total Output Tokens": 0
+    }
+}

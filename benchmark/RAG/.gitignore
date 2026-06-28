@@ -51,3 +51,8 @@ ENV/
 # Temporary files
 *.tmp
 *.temp
+
+# Local secrets (contain API keys) — do not commit
+ov.conf
+config/syllabusqa_0.6b.yaml
+config/syllabusqa_0.6b_norerank.yaml

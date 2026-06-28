@@ -169,21 +169,61 @@ def rerank_scores_cross_encoder(
     no_token = cfg.get("reranker", {}).get("no_token", "no")
     max_length = cfg["max_length"]
 
-    texts = [build_qwen3_reranker_prompt(instruction, q, d) for q, d in zip(queries, docs)]
-    inputs = tokenize_inputs(tokenizer, texts, max_length)
-    input_ids = mx.array(inputs["input_ids"].astype(np.int32))
+    inner = tokenizer._tokenizer if hasattr(tokenizer, "_tokenizer") else tokenizer
+
+    # Build inputs at the token level (matching the official Qwen3-Reranker):
+    # tokenize the fixed prefix/suffix separately and truncate ONLY the
+    # instruct+query+document body. This guarantees the assistant decision
+    # suffix (where "yes"/"no" is predicted) always survives -- truncating the
+    # full prompt string instead chops off the suffix on long documents, so the
+    # scored position lands mid-document and the yes/no logits become garbage.
+    prefix_ids = inner(QWEN3_RANKER_PREFIX, add_special_tokens=False)["input_ids"]
+    suffix_ids = inner(QWEN3_RANKER_SUFFIX, add_special_tokens=False)["input_ids"]
+    body_budget = max(1, max_length - len(prefix_ids) - len(suffix_ids))
+
+    bodies = [
+        f"<Instruct>: {instruction}\n<Query>: {q}\n<Document>: {d}"
+        for q, d in zip(queries, docs)
+    ]
+    body_ids = inner(
+        bodies, add_special_tokens=False, truncation=True, max_length=body_budget
+    )["input_ids"]
+
+    seqs = [prefix_ids + b + suffix_ids for b in body_ids]
+    batch_len = max(len(s) for s in seqs)
+    pad_id = inner.pad_token_id if inner.pad_token_id is not None else 0
+
+    input_ids_np = np.full((len(seqs), batch_len), pad_id, dtype=np.int32)
+    attention_mask_np = np.zeros((len(seqs), batch_len), dtype=np.int32)
+    for i, s in enumerate(seqs):  # right padding
+        input_ids_np[i, : len(s)] = s
+        attention_mask_np[i, : len(s)] = 1
+    input_ids = mx.array(input_ids_np)
 
     if use_mlx_embeddings:
-        attention_mask = mx.array(inputs["attention_mask"].astype(np.int32))
+        attention_mask = mx.array(attention_mask_np)
         last_hidden_state = model.model(input_ids, attention_mask=attention_mask)
         logits = model.model.embed_tokens.as_linear(last_hidden_state)
     else:
+        # mlx_lm builds its own causal mask. With right-padding, each sequence's
+        # final real token only attends to earlier real tokens, so its logits are
+        # uncorrupted by padding -- we just have to read them at the true last
+        # token index rather than [:, -1, :] (which is a PAD row for the shorter
+        # sequences in a mixed-length batch).
         outputs = model(input_ids)
         logits = outputs[0] if isinstance(outputs, tuple) else outputs
 
     yes_id = get_token_id(tokenizer, yes_token)
     no_id = get_token_id(tokenizer, no_token)
-    last_logits = logits[:, -1, :]
+
+    # Gather logits at each row's last non-padding token (attention_mask.sum - 1),
+    # which is now always the final suffix token (the yes/no decision point).
+    last_idx = attention_mask_np.sum(axis=1).astype(np.int32) - 1
+    gather_idx = mx.broadcast_to(
+        mx.array(last_idx).reshape(-1, 1, 1),
+        (logits.shape[0], 1, logits.shape[2]),
+    )
+    last_logits = mx.take_along_axis(logits, gather_idx, axis=1)[:, 0, :]
 
     score_matrix = np.stack(
         [
