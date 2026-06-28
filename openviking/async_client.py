@@ -74,8 +74,7 @@ class AsyncOpenViking:
 
         self._client: BaseClient = LocalClient(
             path=path,
-            actor_peer_id=actor_peer_id,
-            agent_id=agent_id,
+            actor_peer_id=actor_peer_id if actor_peer_id is not None else agent_id,
         )
         self._singleton_initialized = True
 
