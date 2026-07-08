@@ -1,6 +1,6 @@
 # Embedding / Reranker 多模型对比报告：default
 
-**生成时间：** 2026-06-26 20:45:37
+**生成时间：** 2026-06-29 09:28:55
 **测试环境：** macOS Apple Silicon, MLX 本地推理
 
 ---
@@ -18,10 +18,7 @@
 
 | 组合 | 模型 | Loader | STS Spearman | Paraphrase Acc | Paraphrase F1 | Recall@1 | Recall@5 | MRR | V-measure |
 |------|------|--------|--------------|----------------|---------------|----------|----------|-----|-----------|
-| low_memory_4bit | Qwen3-Embedding-0.6B-4bit-DWQ | mlx_embeddings | 0.9371 | 0.9000 | 0.9167 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| low_memory_mxfp8 | Qwen3-Embedding-0.6B-mxfp8 | mlx_embeddings | 0.9477 | 0.9500 | 0.9565 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
-| balanced | Qwen3-Embedding-4B-4bit-DWQ | mlx_embeddings | 0.9025 | 0.9000 | 0.9167 | 0.9333 | 1.0000 | 0.9667 | 1.0000 |
-| high_quality | Qwen3-Embedding-8B-mxfp8 | mlx_embeddings | 0.9281 | 0.9500 | 0.9565 | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| low_memory_4bit | Qwen3-Embedding-0.6B-4bit-DWQ | mlx_embeddings | 0.9409 | 0.9000 | 0.9167 | 0.9333 | 1.0000 | 0.9500 | 1.0000 |
 
 ---
 
@@ -29,10 +26,8 @@
 
 | 组合 | 模型 | Loader | Mode | Pairwise Acc | NDCG@10 | Spearman |
 |------|------|--------|------|--------------|---------|----------|
-| low_memory_4bit | Qwen3-Reranker-0.6B-4bit (cross-encoder) | mlx_lm | cross_encoder | 1.0000 | 0.9864 | 0.2502 |
-| low_memory_mxfp8 | Qwen3-Reranker-0.6B-mxfp8 (bi-encoder) | mlx-embeddings | embedding_similarity | 0.3636 | 0.7619 | -0.1230 |
-| balanced | Qwen3-Reranker-0.6B-4bit (cross-encoder) | mlx_lm | cross_encoder | 1.0000 | 0.9864 | 0.2502 |
-| high_quality | Qwen3-Reranker-8B-mxfp8 (bi-encoder) | mlx-embeddings | embedding_similarity | 0.9091 | 0.9685 | 0.2124 |
+| low_memory_4bit | Qwen3-Reranker-0.6B-4bit (cross-encoder) | mlx_lm | cross_encoder | 1.0000 | 1.0000 | 0.9101 |
+| balanced | Qwen3-Reranker-0.6B-4bit (cross-encoder) | mlx_lm | cross_encoder | 1.0000 | 1.0000 | 0.9101 |
 
 ---
 
