@@ -1,6 +1,6 @@
 # OpenViking HTTP API 参考与测试方案
 
-> 版本：OpenViking 0.4.4（commit `cab0d525`）  
+> 版本：OpenViking 开发分支（HEAD `a1c633c3`，git describe `v0.4.9-22`；`/health.version` 报告 `0.4.4`）  
 > 测试环境：macOS Apple Silicon，Python 3.13.12，MLX 嵌入/重排序服务（127.0.0.1:11436），OpenViking Server（127.0.0.1:1933）  
 > 文档用途：列出 OpenViking 对外暴露的 HTTP API、功能说明、典型使用场景，并附功能/性能测试结果与可复用的测试协议。
 
@@ -23,7 +23,7 @@
 
 OpenViking 是一个面向 AI Agent 的开源上下文数据库（Context Database）。它采用"文件系统范式"统一管理 memories、resources、skills 三类上下文，并提供 L0/L1/L2 三级分层加载、语义检索、目录递归检索、会话记忆归档、Observer 可观测性等能力。
 
-本文档基于 `openviking/server/routers/*.py` 源码与官方文档整理，覆盖 OpenViking 0.4.4 的所有 REST 接口，并提供可直接运行的功能与性能测试方案。
+本文档基于 `openviking/server/routers/*.py` 源码（HEAD `a1c633c3`）逐文件核对整理，覆盖 OpenViking 当前对外暴露的全部 REST 接口，并提供可直接运行的功能与性能测试方案。
 
 ---
 
@@ -129,7 +129,6 @@ OpenViking 接口统一返回如下 JSON 结构：
 | 方法 | 路径 | 功能简介 | 典型场景 |
 |------|------|----------|----------|
 | `POST` | `/api/v1/resources/temp_upload` | 临时文件上传，返回 `temp_file_id` | 本地文件先上传再导入 |
-| `POST` | `/api/v1/resources/temp_upload_signed` | 通过短期签名 Token 上传 | MCP 渐进式上传 |
 | `POST` | `/api/v1/resources` | 添加远程/本地资源到 OpenViking | 导入 GitHub README、文档仓库 |
 | `POST` | `/api/v1/skills` | 添加 Skill（与资源上传共用临时文件机制） | 注册 Agent 工具/技能 |
 
@@ -193,6 +192,8 @@ OpenViking 通过虚拟文件系统 URI（`viking://...`）暴露资源，支持
 | `GET` | `/api/v1/fs/ls` | 列出目录内容 | 资源浏览器、文件选择器 |
 | `GET` | `/api/v1/fs/tree` | 递归列出目录树 | 展示完整目录结构 |
 | `GET` | `/api/v1/fs/stat` | 获取文件/目录元信息 | 判断类型、大小、修改时间 |
+| `GET` | `/api/v1/fs/attrs` | 获取逻辑扩展属性（tags/memory） | 读取检索标签、记忆属性 |
+| `POST` | `/api/v1/fs/attrs/set_tags` | 设置检索标签 | 与 `/content/set_tags` 等价 |
 | `POST` | `/api/v1/fs/mkdir` | 创建目录 | 组织资源 |
 | `DELETE` | `/api/v1/fs` | 删除文件或目录 | 清理资源 |
 | `POST` | `/api/v1/fs/mv` | 移动/重命名 | 整理目录 |
@@ -215,6 +216,14 @@ OpenViking 通过虚拟文件系统 URI（`viking://...`）暴露资源，支持
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `uri` | string | 是 | 文件或目录 URI |
+
+**`/api/v1/fs/attrs` 查询参数**：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `uri` | string | 是 | 文件或目录 URI |
+
+> `attrs` 返回 `context_type` 与 `attrs.tags`；当 URI 为 memory 文件时额外返回 `attrs.memory`。`POST /api/v1/fs/attrs/set_tags` 请求体与 `POST /api/v1/content/set_tags` 一致（`uri`、`tags`、`mode=replace`、`recursive`）。
 
 **示例**：
 
@@ -267,6 +276,7 @@ OpenViking 提供三类检索能力：语义检索（find/search）、内容检�
 |------|------|----------|----------|
 | `POST` | `/api/v1/search/find` | 语义检索（无会话） | 知识库问答 |
 | `POST` | `/api/v1/search/search` | 语义检索（带会话上下文） | 会话中检索 |
+| `POST` | `/api/v1/search/recall` | 按类型配额的记忆召回（bounded 渲染） | Agent 注入相关记忆 |
 | `POST` | `/api/v1/search/grep` | 文本模式匹配 | 代码/文档关键字搜索 |
 | `POST` | `/api/v1/search/glob` | Glob 路径匹配 | 按文件名/后缀筛选 |
 
@@ -301,6 +311,23 @@ curl -X POST http://127.0.0.1:1933/api/v1/search/find \
     "limit": 3
   }'
 ```
+
+#### `POST /api/v1/search/recall`
+
+按类型配额的记忆召回（type-quota recall）：在字符预算内召回并渲染最相关的记忆，供 Agent 注入上下文。
+
+**请求体（RecallRequest）**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `query` | string | 是 | 召回 query |
+| `quotas` | object | 否 | 各记忆类型条数配额，默认 `{"events":10,"entities":10,"preferences":3,"experiences":0}` |
+| `max_chars` | int | 否 | 渲染总字符上限，默认 `6500` |
+| `min_score` | float | 否 | 相似度阈值，默认 `0.1` |
+| `peer_scope` | string | 否 | `actor`（仅当前用户）/ `all`（默认 `all`） |
+| `other_peer_penalty` | float/object | 否 | 其他用户记忆降权（数值或按类型字典） |
+| `render` | bool | 否 | 是否渲染为文本（默认 true） |
+| `telemetry` | object | 否 | 链路统计 |
 
 #### `POST /api/v1/search/grep`
 
@@ -485,10 +512,12 @@ curl -X POST http://127.0.0.1:1933/api/v1/search/find \
 
 | 方法 | 路径 | 功能简介 | 典型场景 |
 |------|------|----------|----------|
-| `GET` | `/api/v1/bot/health` | Bot 健康检查 | Bot 状态监控 |
-| `POST` | `/api/v1/bot/chat` | 非流式对话 | 单次问答 |
-| `POST` | `/api/v1/bot/chat/stream` | 流式对话 | 实时响应 |
-| `POST` | `/api/v1/bot/feedback` | 提交反馈 | 强化学习 |
+| `GET` | `/bot/v1/health` | Bot 健康检查 | Bot 状态监控 |
+| `POST` | `/bot/v1/chat` | 非流式对话 | 单次问答 |
+| `POST` | `/bot/v1/chat/stream` | 流式对话 | 实时响应 |
+| `POST` | `/bot/v1/feedback` | 提交反馈 | 强化学习 |
+
+> Bot 路由挂载在 `/bot/v1` 前缀下（非 `/api/v1/bot`）。
 
 ---
 
@@ -496,15 +525,17 @@ curl -X POST http://127.0.0.1:1933/api/v1/search/find \
 
 | 方法 | 路径 | 功能简介 | 典型场景 |
 |------|------|----------|----------|
-| `POST` | `/api/v1/accounts` | 创建账户 | 多租户 |
-| `GET` | `/api/v1/accounts` | 列出账户 | 账户管理 |
-| `DELETE` | `/api/v1/accounts/{account_id}` | 删除账户 | 下线 |
-| `POST` | `/api/v1/accounts/{account_id}/users` | 创建用户 | 用户管理 |
-| `GET` | `/api/v1/accounts/{account_id}/users` | 列出用户 | 用户管理 |
-| `DELETE` | `/api/v1/accounts/{account_id}/users/{user_id}` | 删除用户 | 用户下线 |
-| `PUT` | `/api/v1/accounts/{account_id}/users/{user_id}/role` | 修改用户角色 | 权限调整 |
-| `POST` | `/api/v1/accounts/{account_id}/users/{user_id}/key` | 生成 API Key | 密钥轮换 |
-| `POST` | `/api/v1/accounts/migrate` | 数据迁移 | 升级、迁移 |
+| `POST` | `/api/v1/admin/accounts` | 创建账户 | 多租户 |
+| `GET` | `/api/v1/admin/accounts` | 列出账户 | 账户管理 |
+| `DELETE` | `/api/v1/admin/accounts/{account_id}` | 删除账户 | 下线 |
+| `POST` | `/api/v1/admin/accounts/{account_id}/users` | 创建用户 | 用户管理 |
+| `GET` | `/api/v1/admin/accounts/{account_id}/users` | 列出用户 | 用户管理 |
+| `DELETE` | `/api/v1/admin/accounts/{account_id}/users/{user_id}` | 删除用户 | 用户下线 |
+| `PUT` | `/api/v1/admin/accounts/{account_id}/users/{user_id}/role` | 修改用户角色 | 权限调整 |
+| `POST` | `/api/v1/admin/accounts/{account_id}/users/{user_id}/key` | 生成 API Key | 密钥轮换 |
+| `POST` | `/api/v1/admin/migrate` | 数据迁移 | 升级、迁移 |
+
+> Admin 路由统一挂载在 `/api/v1/admin` 前缀下；`dev` 模式通常未启用多租户，相关接口可能返回 404。
 
 ---
 
@@ -530,22 +561,102 @@ curl -X POST http://127.0.0.1:1933/api/v1/search/find \
 
 ### 4.20 Stats（统计）
 
+记忆健康度与会话提取统计，挂载在 `/api/v1/stats` 前缀下。
+
 | 方法 | 路径 | 功能简介 | 典型场景 |
 |------|------|----------|----------|
-| `GET` | `/api/v1/memories` | 记忆统计 | 记忆大盘 |
-| `GET` | `/api/v1/sessions/{session_id}` | 会话统计 | 单会话统计 |
+| `GET` | `/api/v1/stats/memories` | 记忆统计（按类别聚合热度/陈旧度） | 记忆大盘 |
+| `GET` | `/api/v1/stats/sessions/{session_id}` | 会话记忆提取统计 | 单会话统计 |
 
-> 当前环境 `/api/v1/memories` 返回 404，可能需在特定配置/模块启用。
+**`/api/v1/stats/memories` 查询参数**：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `category` | string | 否 | 按记忆类别过滤 |
+
+> 注意：早期文档误记为 `/api/v1/memories`（返回 404），正确路径为 `/api/v1/stats/memories`。`/api/v1/sessions/{session_id}`（会话详情）由 Sessions 路由提供，与本统计接口不同。
 
 ---
 
 ### 4.21 WebDAV
 
-OpenViking 同时提供 WebDAV 服务（默认路径 `/webdav` 或独立端口），可直接用文件管理器或挂载为本地磁盘访问 `viking://` 命名空间。
+OpenViking 同时提供 WebDAV 服务（挂载路径 `/webdav/resources`），可直接用文件管理器或挂载为本地磁盘访问 `viking://resources` 命名空间。
 
 | 方法 | 路径 | 功能简介 | 典型场景 |
 |------|------|----------|----------|
-| WebDAV | `/webdav` | 文件系统协议访问 | 挂载为本地目录 |
+| WebDAV | `/webdav/resources` | 文件系统协议访问（`viking://resources` 命名空间） | 挂载为本地目录 |
+
+### 4.22 Snapshot（快照 / Git 式版本控制）
+
+对工作区进行 git 风格的快照（commit/restore/show/log）与 `.ovgitignore` 管理，底层对应 VikingFS 的 commit/restore/show/log。
+
+| 方法 | 路径 | 功能简介 | 典型场景 |
+|------|------|----------|----------|
+| `POST` | `/api/v1/snapshot/commit` | 创建快照 | 保存工作区状态 |
+| `POST` | `/api/v1/snapshot/restore` | 前向提交式恢复 | 回滚/重建到指定 commit |
+| `GET` | `/api/v1/snapshot/show` | 查看提交元数据或 blob | 历史内容查看 |
+| `GET` | `/api/v1/snapshot/log` | 提交历史 | 版本审计 |
+| `GET` | `/api/v1/snapshot/ignore` | 读取 `.ovgitignore` | 查看忽略规则 |
+| `PUT` | `/api/v1/snapshot/ignore` | 写入 `.ovgitignore` | 设置忽略规则 |
+| `DELETE` | `/api/v1/snapshot/ignore` | 删除 `.ovgitignore` | 清除忽略规则 |
+
+**`POST /api/v1/snapshot/commit` 请求体（CommitRequest）**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `message` | string | 是 | 提交信息 |
+| `paths` | array | 否 | 限定快照路径列表 |
+| `branch` | string | 否 | 分支，默认 `main` |
+| `author_name` | string | 否 | 作者名 |
+| `author_email` | string | 否 | 作者邮箱 |
+
+**`POST /api/v1/snapshot/restore` 请求体（RestoreRequest）**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `source_commit` | string | 是 | 恢复源 commit oid |
+| `project_dir` | string | 否 | 目标项目目录 |
+| `branch` | string | 否 | 分支，默认 `main` |
+| `dry_run` | bool | 否 | 仅预演不写回（默认 false） |
+| `message` | string | 否 | 恢复提交信息 |
+| `author_name`/`author_email` | string | 否 | 作者信息 |
+
+**`GET /api/v1/snapshot/show` 查询参数**：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `target_ref` | string | 是 | commit oid / 分支 / tag |
+| `path` | string | 否 | 指定 blob 的 `viking://` URI；不传返回提交元数据 JSON，传则返回原始字节（带 `X-Snapshot-Oid`/`X-Snapshot-Size` 响应头） |
+
+**`GET /api/v1/snapshot/log` 查询参数**：
+
+| 参数 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `branch` | string | 否 | 分支，默认 `main` |
+| `limit` | int | 否 | 最大返回数，默认 20（范围 1–500） |
+
+**`PUT /api/v1/snapshot/ignore` 请求体（SetIgnoreRequest）**：`{ "content": string }`。
+
+---
+
+### 4.23 User Settings（用户设置）
+
+管理当前用户的资源/技能"添加位置"（add-locations）覆盖；响应同时返回 `override`（用户覆盖）与 `effective`（合并 server 配置后的最终生效值）。
+
+| 方法 | 路径 | 功能简介 | 典型场景 |
+|------|------|----------|----------|
+| `GET` | `/api/v1/user-settings/add-locations` | 读取 override + effective | 查看默认添加目标 |
+| `PATCH` | `/api/v1/user-settings/add-locations` | 增量更新 override | 修改默认 resource/skill 目录 |
+| `DELETE` | `/api/v1/user-settings/add-locations` | 清除 override | 恢复为 server 默认 |
+
+**`PATCH /api/v1/user-settings/add-locations` 请求体（PatchAddLocationsRequest）**：
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `resource_uri` | string | 否 | 资源默认添加目标 URI；传 `null` 清除该字段 |
+| `skill_uri` | string | 否 | 技能默认添加目标 URI；传 `null` 清除该字段 |
+
+响应 `result` 包含 `override` 与 `effective`，各自带 `resource_uri`/`skill_uri`。
 
 ---
 
@@ -588,10 +699,9 @@ OpenViking 同时提供 WebDAV 服务（默认路径 `/webdav` 或独立端口�
 | 接口 | 方法 | 路径 | 状态 | 说明 |
 |------|------|------|------|------|
 | Prometheus 指标 | GET | `/metrics` | ❌ 404 | 未启用 Prometheus metrics |
-| 记忆统计 | GET | `/api/v1/memories` | ❌ 404 | 当前配置未暴露 |
 | 向量计数 | GET | `/api/v1/debug/vector/count` | ❌ 404 | 当前配置未暴露 |
 | 备份列表 | GET | `/api/v1/pack/backup` | ❌ 405 | 仅支持 POST |
-| 账户管理 | GET | `/api/v1/accounts` | ❌ 404 | dev 模式下未启用多租户 Admin |
+| 账户管理 | GET | `/api/v1/admin/accounts` | ❌ 404 | dev 模式下未启用多租户 Admin |
 
 ### 5.3 关键发现
 
@@ -934,6 +1044,6 @@ curl -X POST http://127.0.0.1:1933/api/v1/resources \
 
 ## 9. 总结
 
-OpenViking 0.4.4 提供了覆盖上下文全生命周期的 REST API：资源导入、文件系统管理、三级内容读取、语义/文本/路径检索、会话记忆、可观测性、管理运维等。本地 MLX 环境下，纯本地接口延迟极低（< 10ms P95），语义检索受模型推理影响在百毫秒级。生产部署建议切换至 GPU/云 Embedding 服务以提升吞吐。
+OpenViking 当前版本（HEAD `a1c633c3`）提供了覆盖上下文全生命周期的 REST API：资源导入、文件系统管理、三级内容读取、语义/文本/路径检索、按类型配额记忆召回、会话记忆、Git 式快照、用户设置、可观测性、管理运维等。本地 MLX 环境下，纯本地接口延迟极低（< 10ms P95），语义检索受模型推理影响在百毫秒级。生产部署建议切换至 GPU/云 Embedding 服务以提升吞吐。
 
 本文档中的接口清单、请求/响应说明、功能/性能测试结果与测试协议可直接作为开发集成、验收测试与日常运维的参考。
