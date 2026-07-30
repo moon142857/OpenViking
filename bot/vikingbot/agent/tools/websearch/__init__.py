@@ -18,7 +18,7 @@ from .base import WebSearchBackend
 from .registry import registry
 
 # Import backends to register them
-from . import brave, ddgs, exa, tavily
+from . import brave, ddgs, exa, kimi, tavily
 
 
 class WebSearchTool(Tool):

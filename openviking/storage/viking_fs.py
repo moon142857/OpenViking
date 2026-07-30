@@ -64,6 +64,29 @@ from openviking_cli.utils.config.grep_config import GrepEngine
 from openviking_cli.utils.logger import get_logger
 from openviking_cli.utils.uri import VikingURI
 
+
+def _resolve_default_retriever_mode() -> Optional[str]:
+    """Map ``default_search_mode`` config to a RetrieverMode value.
+
+    Returns None when unset/unknown so the retriever keeps its own fallback.
+    "thinking" works with or without a reranker (rerank steps are skipped
+    when no rerank client is configured); "fast"/"quick" force QUICK mode.
+    """
+    try:
+        from openviking_cli.utils.config.open_viking_config import (
+            get_openviking_config,
+        )
+
+        raw = (get_openviking_config().default_search_mode or "").strip().lower()
+    except Exception:
+        return None
+    if raw == "thinking":
+        return "thinking"
+    if raw in ("fast", "quick"):
+        return "quick"
+    return None
+
+
 if TYPE_CHECKING:
     from openviking.storage.transaction.lock_handle import LockHandle
     from openviking.storage.viking_vector_index_backend import VikingVectorIndexBackend
@@ -2043,6 +2066,7 @@ class VikingFS:
             typed_query,
             ctx=real_ctx,
             limit=limit,
+            mode=_resolve_default_retriever_mode(),
             score_threshold=score_threshold,
             scope_dsl=filter,
             level=level,
@@ -2181,6 +2205,7 @@ class VikingFS:
                 tq,
                 ctx=real_ctx,
                 limit=limit,
+                mode=_resolve_default_retriever_mode(),
                 score_threshold=score_threshold,
                 scope_dsl=filter,
                 level=level,

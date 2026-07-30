@@ -80,7 +80,7 @@ class WebSearchBackendRegistry:
 
         Priority: tavily → exa → brave → ddgs
         """
-        priority = ["tavily", "exa", "brave", "ddgs"]
+        priority = ["kimi", "tavily", "exa", "brave", "ddgs"]
 
         for name in priority:
             backend = self.create(name, brave_api_key, exa_api_key, tavily_api_key)
