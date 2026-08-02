@@ -1,0 +1,28 @@
+[Unit]
+Description=OpenViking server + bot - textbooks library (port 1933, bot 18791)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<DEPLOY_USER>
+Group=<DEPLOY_USER>
+WorkingDirectory=<REPO_DIR>
+# systemd 干净环境，无代理变量泄露。GLM52_* 供 ov.conf ${VAR} 展开。
+# OPENVIKING_CLI_CONFIG_FILE 指向教材库专用 ovcli（含教材 admin key），bot 连 1933。
+Environment=PATH=<HOME>/.cargo/bin:<REPO_DIR>/.venv/bin:/usr/bin:/bin
+Environment=HOME=<HOME>
+Environment=PYTHONUNBUFFERED=1
+Environment=GLM52_API_KEY=<REDACTED>
+Environment=GLM52_BASE_URL=https://ark.cn-beijing.volces.com/api/plan
+Environment=GLM52_MODEL=glm-5-2-260617
+Environment=OPENVIKING_CLI_CONFIG_FILE=<DATA_DIR>/ovcli-textbooks.conf
+Environment=KIMI_SEARCH_API_KEY=<REDACTED>
+ExecStart=<REPO_DIR>/.venv/bin/python -m openviking_cli.server_bootstrap --config <DATA_DIR>/ov.conf --port 1933 --with-bot --bot-port 18791
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

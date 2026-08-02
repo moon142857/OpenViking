@@ -1,0 +1,27 @@
+[Unit]
+Description=OpenViking server + bot - curriculum library (port 1934, bot 18790)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<DEPLOY_USER>
+Group=<DEPLOY_USER>
+WorkingDirectory=<REPO_DIR>
+# 课标库 bot 用默认 18790 + 课标库专用 ovcli（含课标 admin key），bot 连 1934。
+Environment=PATH=<HOME>/.cargo/bin:<REPO_DIR>/.venv/bin:/usr/bin:/bin
+Environment=HOME=<HOME>
+Environment=PYTHONUNBUFFERED=1
+Environment=GLM52_API_KEY=<REDACTED>
+Environment=GLM52_BASE_URL=https://ark.cn-beijing.volces.com/api/plan
+Environment=GLM52_MODEL=glm-5-2-260617
+Environment=OPENVIKING_CLI_CONFIG_FILE=<DATA_DIR>/ovcli-curriculum.conf
+Environment=KIMI_SEARCH_API_KEY=<REDACTED>
+ExecStart=<REPO_DIR>/.venv/bin/python -m openviking_cli.server_bootstrap --config <DATA_DIR>/ov-curriculum.conf --port 1934 --with-bot --bot-port 18790
+Restart=on-failure
+RestartSec=5s
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
