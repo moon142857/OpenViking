@@ -68,6 +68,15 @@ class WriteFileTool(Tool):
         try:
             sandbox = await tool_context.sandbox_manager.get_sandbox(tool_context.session_key)
             await sandbox.write_file(path, content)
+            # __ov_truncated__：providers/base.py 从被上游截断的参数里抢救出的部分内容。
+            # 必须明确回告模型"文档不完整"，否则它以为写成功，用户拿到残缺文件。
+            if kwargs.get("__ov_truncated__"):
+                return (
+                    f"Warning: 工具参数在传输中被上游网关截断，内容不完整，"
+                    f"仅前 {len(content)} 个字符已写入 {path}。"
+                    f"请把剩余内容拆小（每段不超过约 2000 字符），用 edit_file 逐段追加补齐"
+                    f"（old_text 取文件末尾几个字，new_text 为末尾原文+续写内容）。"
+                )
             return f"Successfully wrote {len(content)} bytes to {path}"
         except IOError as e:
             return f"Error: {e}"

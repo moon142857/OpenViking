@@ -17,6 +17,7 @@ from vikingbot.providers.base import (
     build_stream_response,
     merge_stream_tool_call_delta,
     stream_delta_value,
+    unwrap_tool_arguments,
 )
 from vikingbot.providers.registry import find_by_model, find_gateway
 from vikingbot.utils.helpers import cal_str_tokens
@@ -524,6 +525,8 @@ class LiteLLMProvider(LLMProvider):
                     try:
                         tokens += cal_str_tokens(args, text_type="mixed")
                         args = json.loads(args)
+                        if isinstance(args, dict):
+                            args = unwrap_tool_arguments(args)
                     except json.JSONDecodeError:
                         args = {"raw": args}
 

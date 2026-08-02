@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import ipaddress
+import json
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -397,20 +398,51 @@ class OpenAPIChannel(BaseChannel):
             http_request: Request,
             auth: GatewayRequestAuth = Depends(verify_gateway_request),
         ):
-            """List all sessions."""
+            """List all sessions with content (disk-backed).
+
+            以 SessionManager 落盘的 jsonl 为准：只返回当前 scope 名下、且磁盘上有
+            消息的会话；空会话（无消息）自动清理磁盘文件并不展示。
+            """
             scope = await channel._resolve_request_principal(http_request, auth)
             sessions = []
-            for session_data in channel._sessions.values():
-                if session_data.get("principal_scope") != scope:
+            for info in channel._session_manager.list_sessions():
+                session_key = info["key"]
+                if session_key.channel_key() != f"cli__{channel.config.channel_id()}":
                     continue
+                split = channel._split_scoped_chat_id(session_key.chat_id)
+                if split is None:
+                    continue  # 非 scoped（探针等），跳过
+                file_scope, session_id = split
+                if file_scope != scope:
+                    continue  # 不属于当前 viewer
+                msg_count = channel._count_messages_on_disk(session_key)
+                if msg_count == 0:
+                    # 空会话：清理磁盘，不展示
+                    channel._session_manager.delete(session_key)
+                    continue
+                created_raw = info.get("created_at")
+                updated_raw = info.get("updated_at")
+                try:
+                    created_at = (
+                        datetime.fromisoformat(created_raw) if created_raw else datetime.now()
+                    )
+                except (TypeError, ValueError):
+                    created_at = datetime.now()
+                try:
+                    last_active = (
+                        datetime.fromisoformat(updated_raw) if updated_raw else created_at
+                    )
+                except (TypeError, ValueError):
+                    last_active = created_at
                 sessions.append(
                     SessionInfo(
-                        id=session_data["session_id"],
-                        created_at=session_data.get("created_at", datetime.now()),
-                        last_active=session_data.get("last_active", datetime.now()),
-                        message_count=session_data.get("message_count", 0),
+                        id=session_id,
+                        created_at=created_at,
+                        last_active=last_active,
+                        message_count=msg_count,
                     )
                 )
+            sessions.sort(key=lambda s: s.last_active, reverse=True)
             return SessionListResponse(sessions=sessions, total=len(sessions))
 
         @router.post("/sessions", response_model=SessionCreateResponse)
@@ -441,21 +473,25 @@ class OpenAPIChannel(BaseChannel):
             http_request: Request,
             auth: GatewayRequestAuth = Depends(verify_gateway_request),
         ):
-            """Get session details."""
+            """Get session details (disk-backed): 回填落盘的完整消息历史。"""
             scope = await channel._resolve_request_principal(http_request, auth)
             storage_key = channel._scoped_session_id(scope, session_id)
-            if storage_key not in channel._sessions:
+            session_key = channel._session_key_for(scope, session_id)
+            if not channel._session_manager.has_persisted(session_key):
                 raise HTTPException(status_code=404, detail="Session not found")
-
-            session_data = channel._sessions[storage_key]
+            messages = channel._load_session_messages(session_key)
+            if not messages:
+                # 无消息的空会话视为不存在
+                raise HTTPException(status_code=404, detail="Session not found")
+            session = channel._session_manager._load(session_key)
+            created_at = session.created_at if session else datetime.now()
+            last_active = session.updated_at if session else created_at
             info = SessionInfo(
                 id=session_id,
-                created_at=session_data.get("created_at", datetime.now()),
-                last_active=session_data.get("last_active", datetime.now()),
-                message_count=session_data.get("message_count", 0),
+                created_at=created_at,
+                last_active=last_active,
+                message_count=len(messages),
             )
-            # Get messages from session manager if available
-            messages = session_data.get("messages", [])
             return SessionDetailResponse(session=info, messages=messages)
 
         @router.delete("/sessions/{session_id}")
@@ -464,13 +500,14 @@ class OpenAPIChannel(BaseChannel):
             http_request: Request,
             auth: GatewayRequestAuth = Depends(verify_gateway_request),
         ):
-            """Delete a session."""
+            """Delete a session: 删磁盘 jsonl + 内存残留。"""
             scope = await channel._resolve_request_principal(http_request, auth)
             storage_key = channel._scoped_session_id(scope, session_id)
-            if storage_key not in channel._sessions:
+            session_key = channel._session_key_for(scope, session_id)
+            deleted = channel._session_manager.delete(session_key)
+            channel._sessions.pop(storage_key, None)
+            if not deleted:
                 raise HTTPException(status_code=404, detail="Session not found")
-
-            del channel._sessions[storage_key]
             return {"deleted": True}
 
         # ========== Bot Channel Routes ==========
@@ -1017,6 +1054,59 @@ class OpenAPIChannel(BaseChannel):
     @staticmethod
     def _scoped_session_id(principal_scope: str, session_id: str) -> str:
         return f"{principal_scope}:{session_id}"
+
+    def _session_key_for(self, scope: str, session_id: str) -> SessionKey:
+        """构造 chat 流程使用的 SessionKey（type=cli, channel=default, chat=scoped id）。"""
+        return SessionKey(
+            type="cli",
+            channel_id=self.config.channel_id(),
+            chat_id=self._scoped_session_id(scope, session_id),
+        )
+
+    @staticmethod
+    def _split_scoped_chat_id(chat_id: str) -> tuple[str, str] | None:
+        """从磁盘文件名反解的 chat_id 里拆出 (scope, session_id)。
+
+        chat_id 形如 `{scope}:{session_id}`（scope 是 hash，session_id 是 uuid）。
+        非 scoped（如 glm-probe 探针，无冒号）返回 None。
+        """
+        if ":" not in chat_id:
+            return None
+        scope, session_id = chat_id.split(":", 1)
+        if not scope or not session_id:
+            return None
+        return scope, session_id
+
+    def _count_messages_on_disk(self, session_key: SessionKey) -> int:
+        """数 jsonl 里 role 行数（即真实消息数）。文件不存在返回 0。"""
+        path = self._session_manager._get_session_path(session_key)
+        if not path.exists():
+            return 0
+        count = 0
+        try:
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except ValueError:
+                        continue
+                    if data.get("_type") == "metadata":
+                        continue
+                    if "role" in data:
+                        count += 1
+        except OSError:
+            return 0
+        return count
+
+    def _load_session_messages(self, session_key: SessionKey) -> list[dict[str, Any]]:
+        """从磁盘加载某会话的消息列表（仅 role/content/timestamp 等，不含 metadata 行）。"""
+        session = self._session_manager._load(session_key)
+        if session is None:
+            return []
+        return list(session.messages)
 
     async def _gateway_health(self, request: Request) -> dict[str, Any]:
         from vikingbot import __version__
